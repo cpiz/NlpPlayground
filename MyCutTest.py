@@ -14,6 +14,9 @@ re_han = re.compile("[\u4E00-\u9FD5]+", re.U)
 
 
 class Tokenizer:
+    """
+    基于词频分析的简单分词器
+    """
     words = {}
 
     def analyse(self, sentence):
@@ -88,7 +91,7 @@ if __name__ == '__main__':
     time_begin = time.perf_counter()
 
     tokenizer = Tokenizer()
-    with open('res/材料帝国.txt', 'r', encoding='UTF-8') as file:
+    with open('res/材料帝国1.txt', 'r', encoding='UTF-8') as file:
     # with open('D:\OneDrive\Books\临高启明.txt', 'r', encoding='UTF-8') as file:
         content = file.read()
         tokenizer.analyse(content)
