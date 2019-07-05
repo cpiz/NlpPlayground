@@ -4,6 +4,7 @@ import re
 import sys
 import time
 
+
 from DoubleLinkedNode import DoubleLinkedNode
 
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)

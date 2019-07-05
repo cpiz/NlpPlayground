@@ -6,7 +6,7 @@ import jieba.analyse
 # https://gist.github.com/hscspring/c985355e0814f01437eaf8fd55fd7998
 
 if __name__ == '__main__':
-    with open('res/材料帝国.txt', 'r', encoding='UTF-8') as file:
+    with open('res/材料帝国1.txt', 'r', encoding='UTF-8') as file:
         content = file.read().replace("\n", "")
 
     # seg_list = jieba.cut(content, cut_all=False)
@@ -19,6 +19,6 @@ if __name__ == '__main__':
     # for tag in tags:
     #     print(f"{tag}")
 
-    # tags2 = jieba.analyse.textrank(content, topK=20, withWeight=True, withFlag=True,allowPOS=['nr'])
-    # for tag in tags:
-    #     print(f"{tag}")
+    tags2 = jieba.analyse.textrank(content, topK=2000, withWeight=True, withFlag=True, allowPOS=['nr'])
+    for tag in tags2:
+        print(f"{tag}")
