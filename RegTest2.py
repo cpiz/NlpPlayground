@@ -21,6 +21,11 @@ if __name__ == '__main__':
     # print(re_talk0.search(str).groups())
     # print(re_talk1.search(str).groups())
     # print(re_talk2.search(str).groups())
-    print(re_talk.split(str1))
-    print(re_talk.split(str2))
-    print(re_end_with_noword.match("在整个科学院系统都素有-").groups())
+    # print(re_talk.split(str1))
+    # print(re_talk.split(str2))
+    # print(re_end_with_noword.match("在整个科学院系统都素有-").groups())
+
+
+    str = ',秦海,,宁中,,中英,,宁中英,,宁默,,韦宝,,宝林,韦宝林,萧东,东平,萧东平,刀片'
+    print(str)
+    print(re.findall(",([^,]*宁中[^,]*),", str, re.U))

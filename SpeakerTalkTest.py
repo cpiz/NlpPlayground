@@ -4,8 +4,10 @@ import re
 import sys
 import time
 
+import jieba
 
 from DoubleLinkedNode import DoubleLinkedNode
+from tag_analyzer import TagAnalyzer
 
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
@@ -33,45 +35,48 @@ class SpeakerTalk:
         # logging.debug((speaker, talk))
 
     def __str__(self):
-        speaker = self.speaker if self.speaker else "Voice Over"
+        speaker = self.speaker if self.speaker else None
         return f"row[{self.row_num}]{speaker}: {self.talk}"
 
 
-class Tokenizer:
+class SpeakerTalkAnalyzer:
+    tag_analyzer = TagAnalyzer()
     speaker_talks = None
 
-    def analyse(self, lines):
-        # 将内容拆分为对白片段
-        self.speaker_talks = self.split_to_double_linked(lines)
+    def analyse(self, content):
+        self.tag_analyzer.analyse(content)
 
-        # 完善发言人
-        self.complete_speaker(self.speaker_talks)
+        # 将内容拆分为对白片段
+        self.speaker_talks = self.split_to_double_linked(content)
 
         # 合并同一行内的画外音
         self.combine_over_voice(self.speaker_talks)
+
+        # 完善发言人
+        self.complete_speaker(self.speaker_talks)
 
         for speak in self.speaker_talks.datas():
             logging.debug(speak)
 
     @staticmethod
-    def split_to_double_linked(lines):
+    def split_to_double_linked(content):
         """
         将多行文本拆分成对白片段，装入双链表
-        :param lines: 多行文本
+        :param content: 多行文本
         :return: 双链表头结点
         """
         head = None
         node = None
         row_num = 0
-        for line in lines:
+        for line in content.split("\n"):
             row_num += 1
             line = line.strip()
 
             for piece in re_word_in_quote.split(line):
                 if piece:
                     if not head:
-                        node = DoubleLinkedNode(SpeakerTalk(row_num, piece))
-                        head = node
+                        head = DoubleLinkedNode(SpeakerTalk(row_num, piece))
+                        node = head
                     else:
                         node = node.insert_after(SpeakerTalk(row_num, piece))
 
@@ -83,21 +88,18 @@ class Tokenizer:
         通过上下文内容完善指定结点的发言人
         """
         for n in node.nodes():
-            speaker = ""
             if re_word_in_quote.match(n.data.talk):
-                if n.prev \
-                        and n.prev.data.row_num == n.data.row_num \
-                        and not re_end_with_noword.match(n.prev.data.talk):
-                    # 排除简单引用的情况，如：在整个科学院系统都素有“鬼才”之称，「鬼才」就不是对话内容
-                    # 规则是与前文直接连续，无换行符或标点间隔
-                    speaker = ""
-                    logging.warning("just quote content: " + n.data.talk)
-                else:
-                    # TODO: 分析说话者
-                    speaker = "Somebody"
+                if n.prev and n.prev.data.row_num == n.data.row_num:
+                    match = re.search("([^？。！]*)：$", n.prev.data.talk)
+                    if match:
+                        prev_says = match.group(1)
+                        print("/".join(jieba.cut(prev_says)))
+
+                # TODO: 分析说话者
+                speaker = "Somebody"
             else:
                 # 未被括号引用的内容，都是画外音
-                speaker = ""
+                speaker = "VoiceOver"
 
             n.data.speaker = speaker
 
@@ -110,11 +112,19 @@ class Tokenizer:
         :param node: 指定结点
         :return: 返回传入的结点
         """
+
         for n in node.nodes():
-            if n.prev and n.data.row_num == n.prev.data.row_num \
-                    and not n.data.speaker and not n.prev.data.speaker:
-                n.prev.data.talk += n.data.talk  # 合并内容
-                n.delete()  # 移除冗余节点
+            if re_word_in_quote.match(n.data.talk):
+                if n.prev and n.prev.data.row_num == n.data.row_num \
+                        and not re_end_with_noword.match(n.prev.data.talk):
+                    # 排除简单引用的情况，如：在整个科学院系统都素有“鬼才”之称，“鬼才”就不是对话内容
+                    # 规则是与前文直接连续，无换行符或标点间隔
+                    n.prev.data.talk += n.data.talk  # 合并内容
+                    n.delete()
+
+                    if n.next and n.next.data.row_num == n.data.row_num:
+                        n.prev.data.talk += n.next.data.talk
+                        n.next.delete()
 
         return node
 
@@ -122,9 +132,9 @@ class Tokenizer:
 if __name__ == '__main__':
     time_begin = time.perf_counter()
 
-    tokenizer = Tokenizer()
+    tokenizer = SpeakerTalkAnalyzer()
     with open('res/材料帝国1.txt', 'r', encoding='UTF-8') as file:
-        tokenizer.analyse(file.readlines())
+        tokenizer.analyse(file.read())
 
     time_end = time.perf_counter()
     logging.info(f"time cost: {time_end - time_begin}")

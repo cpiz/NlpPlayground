@@ -40,7 +40,7 @@ class TagAnalyzer:
                 self.__extra_stop_words.add(word)
 
     def __load_stop_words_regex(self, dict_path):
-        """加载模糊停止词字典"""
+        """加载模糊停止词正则式"""
         reg_str = ""
         with open(dict_path, 'r', encoding='UTF-8') as f:
             for exp in [l.strip() for l in f if l.strip()]:
@@ -55,12 +55,12 @@ class TagAnalyzer:
         logging.info("build tags done")
 
         logging.info("extract tags...")
-        logging.debug(f"tag count before extract: {len(self.tags)}")
-        self.__remove_rares_tags()
-        self.__remove_stop_tags()
+        logging.debug(f"tags count before extract: {len(self.tags)}")
+        self.__remove_low_freq_tags()
+        self.__remove_stop_word_tags()
         self.__remove_stop_regexps()
-        self.__remove_contained_tags()
-        logging.debug(f"tag count after extract: {len(self.tags)}")
+        self.__remove_redundant_tags()
+        logging.debug(f"tags count after extract: {len(self.tags)}")
         logging.info("extract tags done")
 
     def __build_tags(self, sentence):
@@ -109,99 +109,97 @@ class TagAnalyzer:
         # logging.debug(f"add tag: {tag}")
         self.tags[tag] = self.tags.get(tag, 0) + 1
 
+    def __set_tag(self, tag, count):
+        self.tags[tag] = max(0, count)
+
     def __remove_tag(self, tag):
         # logging.debug(f"remove tag: {tag}")
-        del self.tags[tag]
+        # if self.tags[tag]:
+        #     del self.tags[tag]
+        self.tags.pop(tag, None)
 
-    def __remove_rares_tags(self):
+    def __remove_low_freq_tags(self):
         """
-        移除独特词
+        移除低频词
         :return:
         """
-        # for tag, count in self.tags.items():
+        logging.debug("remove low freq tags...")
         for tag, count in {k: v for k, v in self.tags.items() if v}.items():
             if count == 1:
                 self.__remove_tag(tag)
+        logging.debug(f"remove low freq tags done, tags: {len(self.tags)}")
 
-    def __remove_stop_tags(self):
+    def __remove_stop_word_tags(self):
         """
         移除停用词
         :return:
         """
+        logging.debug("remove stop word tags...")
         for tag in [key for key in self.tags.keys()]:
             if tag in self.__extra_stop_words:
                 self.__remove_tag(tag)
+        logging.debug(f"remove stop word tags done, tags: {len(self.tags)}")
 
     def __remove_stop_regexps(self):
         """
         移除停用词
         :return:
         """
+        logging.debug("remove stop regexps tags...")
         for tag in [key for key in self.tags.keys()]:
             if self.__stop_regex.search(tag):
                 self.__remove_tag(tag)
+        logging.debug(f"remove stop regexps done, tags: {len(self.tags)}")
 
-    def __remove_contained_tags(self):
+    def __remove_redundant_tags(self):
         """
         去除被包含的冗余词
         :return:
         """
 
+        logging.debug("remove redundant tags...")
         # 去除两种形式的冗余
 
-        # 1、以长废短：如“总工程师”出现次数与“工程师”相等，那短的词语便是无效的
-        # 2、以短废长：如“秦海”出现100，“秦海道”出现20次，则长的词语便是无效的
-        # TODO: 待优化，需要增加一定容错读，如0.9置信即可
-        pre_count = 0
-        temp_words = []
-        for tag, count in sorted(self.tags.items(), key=lambda x: x[1] * 1000 - len(x[0]), reverse=True):
-            """按词频倒序+词长正序"""
-            if pre_count == 0:
-                pass
-            elif pre_count != count:
-                for redundant_word in self.__find_redundant(temp_words):
-                    self.__remove_tag(redundant_word)
-                temp_words.clear()
+        # 1、吞噬：如“总工程师”出现次数与“工程师”相等，那短词便是无效的，频率差0.95以内可吞噬
+        # 2、分离：如“秦海”出现100，“秦海道”出现20次，则长的词语便是无效的，频率差0.5以下可分离
+        tag_counts = sorted(self.tags.items(), key=lambda x: x[1] * 1000 - len(x[0]), reverse=True)
 
-            temp_words.append(tag)
-            pre_count = count
+        comma_tags_list = {}
+        for i in range(1, MAX_HAN_WORD_LENGTH + 1):
+            comma_tags_list[i] = "," + ",".join(key for key, value in tag_counts if len(key) == i)
 
-            if count < 2:
-                break
-
-    @staticmethod
-    def __find_redundant(keys):
-        """
-        在列表中查找冗余的词语，冗余即被其他词包含，如“你好”被“你好吗”包含，“你好就是冗余词”
-        :param keys: 已按词长排序的列表，短词在前
-        :return:
-        """
-        if len(keys) > 1:
-            joined_keys = ",".join(keys)
-            pos = 0
-            for short_word in keys:
-                pos += (len(short_word) + 1)
-                if joined_keys.find(short_word, pos) > -1:
-                    yield short_word
-                    continue
-
-        yield from []
+        for tag, tag_count in tag_counts:
+            for l in range(len(tag) + 1, MAX_HAN_WORD_LENGTH + 1):
+                for longer_tag in re.findall(f",([^,]*{tag}[^,]*)", comma_tags_list[l]):  # 前面是否以逗号开头，性能相差3倍
+                    if longer_tag == tag:
+                        continue
+                    longer_cat_count = self.tags.get(longer_tag, 0)
+                    if longer_cat_count < tag_count * 0.15:
+                        # 被粘上的杂词
+                        # logging.debug(f"remove longer tag: {longer_tag}")
+                        self.__remove_tag(longer_tag)
+                    else:
+                        tag_count -= longer_cat_count
+                        self.__set_tag(tag, tag_count)
+        logging.debug(f"remove redundant tags done, tags: {len(self.tags)}")
 
 
 if __name__ == '__main__':
     time_begin = time.perf_counter()
 
-    tokenizer = TagAnalyzer()
+    tag_analyzer = TagAnalyzer()
     # book_path = 'res/材料帝国.txt'
     # book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
-    book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
-    # with open(book_path, 'r', encoding='UTF-8') as file:
-    with open(book_path, 'r', encoding='GBK') as file:
+    # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
+    # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
+    book_path = 'D:\\OneDrive\\Books\\重生之官路商途原稿加最好的蛇足续版.txt'
+    # with open(book_path, 'r', encoding='GBK') as file:
+    with open(book_path, 'r', encoding='UTF-8') as file:
         content = file.read()
-        tokenizer.analyse(content)
+        tag_analyzer.analyse(content)
 
     time_end = time.perf_counter()
     logging.info(f"time cost: {time_end - time_begin}")
     # logging.info(sorted(tokenizer.tags.items(), key=lambda x: x[1], reverse=True))
-    for k, v in sorted(tokenizer.tags.items(), key=lambda x: x[1], reverse=True)[:10000]:
+    for k, v in sorted(tag_analyzer.tags.items(), key=lambda x: x[1], reverse=True)[:10000]:
         print(k, v)
