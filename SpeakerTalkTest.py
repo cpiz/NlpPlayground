@@ -7,7 +7,7 @@ import time
 import jieba
 
 from DoubleLinkedNode import DoubleLinkedNode
-from tag_analyzer import TagAnalyzer
+from tag_analyzer_1 import TagAnalyzer
 
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
