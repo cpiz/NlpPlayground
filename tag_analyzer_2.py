@@ -14,10 +14,10 @@ logging.basicConfig(
 
 class TagAnalyzer:
     __re_block = re.compile("([\u4E00-\u9FD5]+|[a-zA-Z0-9_\\-]+)", re.U)
-    __re_eng = re.compile("[a-zA-Z0-9_\\-]+", re.U)
+    __re_eng = re.compile("[a-zA-Z_\\-]+", re.U)
     __re_han = re.compile("[\u4E00-\u9FD5]+", re.U)
     MIN_HAN_WORD_LENGTH = 2
-    MAX_HAN_WORD_LENGTH = 4
+    MAX_HAN_WORD_LENGTH = 5
 
     __extra_stop_words = set()
     """精确停止词，完全相等就算"""
@@ -28,15 +28,21 @@ class TagAnalyzer:
     __tags = {}
 
     def __init__(self):
-        self.__load_dict()
+        self.__load_dict('dict\\chinese.dict')
+        self.__load_dict('dict\\chinese_regions.dict')
+        self.__load_dict('dict\\world_countries.dict')
         self.__load_extra_stop_words('data/stop_words.txt')
         self.__load_stop_words_regex('data/stop_regexps.txt')
         logging.info(f"stop words count: {len(self.__extra_stop_words)}")
 
-    def __load_dict(self):
-        logging.debug("load dict...")
-        with open('dict\\dict.txt', 'r', encoding='UTF-8') as f:
+    def __load_dict(self, dict_path):
+        logging.debug(f"load dict['{dict_path}']...")
+        with open(dict_path, 'r', encoding='UTF-8') as f:
             for word in [l.strip() for l in f if l.strip()]:
+                if word[:1] == '#':
+                    # 忽略注释
+                    continue
+
                 if len(word) > self.MAX_HAN_WORD_LENGTH:
                     continue
 
@@ -47,24 +53,29 @@ class TagAnalyzer:
                     frag = word[:i]
                     if frag not in self.__dict.keys():
                         self.__dict[frag] = 0  # 不完整的词权重为0
-        logging.debug(f"load dict done, size: {len(self.__dict)} ")
+        logging.debug(f"load dict['{dict_path}'] done, size: {len(self.__dict)} ")
 
     def __load_extra_stop_words(self, dict_path):
         """加载精确停止词字典"""
         with open(dict_path, 'r', encoding='UTF-8') as f:
             for word in [l.strip() for l in f if l.strip()]:
                 self.__extra_stop_words.add(word)
-                self.__dict[word] = 1
+                # self.__dict[word] = 1
 
     def __load_stop_words_regex(self, dict_path):
         """加载模糊停止词正则式"""
         reg_str = ""
         with open(dict_path, 'r', encoding='UTF-8') as f:
             for exp in [l.strip() for l in f if l.strip()]:
+                if exp[:1] == '#':
+                    # 忽略注释
+                    continue
+
                 if len(reg_str) != 0:
                     reg_str += '|'
                 reg_str += exp
-        self.__stop_regex = re.compile(reg_str, re.U)
+        # self.__stop_regex = re.compile(f"({reg_str})", re.U)
+        self.__stop_regex = re.compile(f"{reg_str}", re.U)
 
     def analyse(self, sentence):
         logging.info("build tags...")
@@ -80,51 +91,69 @@ class TagAnalyzer:
         logging.debug(f"tags count after extract: {len(self.__tags)}")
 
     def __build_tags(self, sentence):
+        clips = self.__re_block.split(sentence)  # 切分成不包含标点的片段
+        for clip in clips:
+            if not clip:
+                continue
+
+            if self.__re_eng.match(clip):
+                # 英文单词，直接入标签
+                self.__add_tag(clip)
+                continue
+
+            if self.__re_han.match(clip):
+                self.__extract_words(clip)
+
+    def __extract_words(self, clip):
+        i = 0
+        block_length = len(clip)
+        while i < block_length:
+            step_i = 1
+
+            j = i
+            word = None
+            while j < block_length:
+                step_j = 1
+
+                frags = {}
+                for l in range(self.MIN_HAN_WORD_LENGTH, block_length - j + 1):
+                    frag = clip[j:j + l]
+                    weight = self.__dict.get(frag, -1)
+                    if weight < 0:
+                        break
+                    frags[frag] = weight
+                for frag, weight in sorted(frags.items(), key=lambda x: x[1] * 100 + len(x[0]), reverse=True):
+                    # 按权重再词长倒序（关键）查找
+                    if weight > 0:
+                        word = frag
+                        break
+
+                if word:
+                    # self.__add_tag(word)
+                    if j > i:
+                        self.__extract_not_included_words(clip[i:j])
+                    step_i = j - i + len(word)
+                    break
+
+                j += step_j
+
+            if not word:
+                self.__extract_not_included_words(clip[i:block_length])
+                step_i = block_length - i
+
+            i += step_i
+
+    def __extract_not_included_words(self, clip):
         """
-        根据传入内容构造标签
-        :param sentence: 内容
+        收集未收录词
+        :param clip:
         :return:
         """
-        blocks = self.__re_block.split(sentence)  # 切分成不包含标点的片段
-        for block in blocks:
-            if self.__re_eng.match(block):
-                # 英文单词，直接入标签
-                # self.__add_tag(block)
-                pass
-            elif self.__re_han.match(block):
-                # logging.debug(block)
-                i = 0
-                n = len(block)
-                while i < n:
-                    step = 1
-
-                    words = {}
-                    sub_word_begin = self.MAX_HAN_WORD_LENGTH
-                    for j in range(self.MIN_HAN_WORD_LENGTH, min(n - i, self.MAX_HAN_WORD_LENGTH) + 1):
-                        word = block[i:i + j]
-                        word_weight = self.__dict.get(word, 0)
-                        words[word] = word_weight
-
-                    # 按权重再词长倒序（关键）
-                    for word, weight in sorted(words.items(), key=lambda x: x[1] * 10 + len(x[0]), reverse=True):
-                        # 优先词典收录词
-                        if weight > 0:
-                            # self.__add_tag(word)
-                            step = len(word)
-                            break
-
-                        # 非词典收录词
-                        # 需要剔除其中包含的收录词，如“不懂英语”其中包含收录词“英语”，则不应该收录
-                        if sub_word_begin == self.MAX_HAN_WORD_LENGTH:
-                            # sub_word_begin = self.__find_sub_word(word)[0]
-                            sub_word_begin = self.__find_sub_word(
-                                block[i:i + min(n - i, len(word) + self.MAX_HAN_WORD_LENGTH - 1)])[0]
-
-                        if sub_word_begin < 0 or len(word) <= sub_word_begin:
-                            # 添加未收录词
-                            self.__add_tag(word)
-
-                    i += step
+        # if len(clip) > 1:
+        #     print(str([x for x in self.__stop_regex.split(clip) if x]) + "\t" + clip)
+        for frag in self.__stop_regex.split(clip):
+            if len(frag) >= self.MIN_HAN_WORD_LENGTH:
+                self.__add_tag(frag)
 
     def __remove_low_freq_tags(self):
         """
@@ -198,23 +227,22 @@ class TagAnalyzer:
         return self.__tags
 
     def __add_tag(self, tag):
-        # logging.debug(f"add tag: {tag}")
-        self.__tags[tag] = self.__tags.get(tag, 0) + 1
+        if len(tag) >= self.MIN_HAN_WORD_LENGTH:
+            self.__tags[tag] = self.__tags.get(tag, 0) + 1
 
     def __set_tag(self, tag, count):
-        # logging.debug(f"set tag: {tag}:{count}")
         self.__tags[tag] = max(0, count)
 
     def __remove_tag(self, tag):
-        # logging.debug(f"remove tag: {tag}")
         self.__tags.pop(tag, None)
 
 
 if __name__ == '__main__':
     begin_time = time.perf_counter()
     cutter = TagAnalyzer()
-    # book_path = 'res/材料帝国.txt'
-    # book_path = 'res/材料帝国.txt'
+    # book_path = 'res/test_book.txt'
+    book_path = 'res/材料帝国.txt'
+    # book_path = 'res/材料帝国1.txt'
     # book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
@@ -224,7 +252,7 @@ if __name__ == '__main__':
     # book_path = 'E:\\BaiduCloud\\Books\\流氓高手II.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\紫川.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\活色生香.txt'
-    book_path = 'E:\\BaiduCloud\\Books\\弹痕.txt'
+    # book_path = 'E:\\BaiduCloud\\Books\\弹痕.txt'
     try:
         with open(book_path, 'r', encoding='UTF-8') as file:
             content = file.read()
@@ -235,5 +263,5 @@ if __name__ == '__main__':
     end_time = time.perf_counter()
     logging.info(f"time cost: {end_time - begin_time}")
 
-    for k, v in sorted(cutter.tags().items(), key=lambda x: x[1], reverse=True)[:10000]:
+    for k, v in sorted(cutter.tags().items(), key=lambda x: x[1])[:10000]:
         print(k, v)
