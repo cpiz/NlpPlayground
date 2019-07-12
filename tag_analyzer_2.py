@@ -99,6 +99,7 @@ class TagAnalyzer:
 
             if self.__re_eng.match(clip):
                 # 英文单词，直接入标签
+
                 self.__add_tag(clip)
                 continue
 
@@ -199,7 +200,7 @@ class TagAnalyzer:
         # 分离：如“秦海”出现100，“秦海道”出现20次，则长的词语便是无效的，频率差一定系数以下可分离，并将长词次数累加到短词上
         tag_counts = sorted(self.__tags.items(), key=lambda x: x[1] * 1000 - len(x[0]), reverse=True)
         for tag, tag_count in tag_counts:
-            for sub_tag, begin_pos, end_pos in self.__list_sub_words(tag):
+            for sub_tag in self.list_sub_words(tag):
                 sub_tag_count = self.__tags.get(sub_tag, 0)
                 if tag_count < sub_tag_count * 0.1:
                     # 被粘上的杂词
@@ -208,19 +209,23 @@ class TagAnalyzer:
                     self.__set_tag(sub_tag, sub_tag_count + tag_count)
         logging.debug(f"remove redundant tags done, tags: {len(self.__tags)}")
 
-    def __list_sub_words(self, clip):
+    def list_sub_words(self, clip):
         """
         从一个断句中列举出所有词的组合
         :param clip:
         :return:
         """
-        for begin in range(0, len(clip) - self.MIN_HAN_WORD_LENGTH + 1):
-            for end in range(begin + self.MIN_HAN_WORD_LENGTH, len(clip) + 1):
-                sub_word = clip[begin:end]
-                yield sub_word, begin, end
+        n = len(clip)
+        for begin in range(0, n - self.MIN_HAN_WORD_LENGTH + 1):
+            for end in range(begin + self.MIN_HAN_WORD_LENGTH,
+                             begin + min(n - begin, self.MAX_HAN_WORD_LENGTH) + 1):
+                yield clip[begin:end]
 
     def tags(self):
         return self.__tags
+
+    def get_tag_count(self, tag):
+        return self.__tags.get(tag, 0)
 
     def __add_tag(self, tag):
         if len(tag) >= self.MIN_HAN_WORD_LENGTH:
