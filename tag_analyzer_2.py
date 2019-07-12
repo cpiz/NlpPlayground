@@ -17,7 +17,7 @@ class TagAnalyzer:
     __re_eng = re.compile("[a-zA-Z_\\-]+", re.U)
     __re_han = re.compile("[\u4E00-\u9FD5]+", re.U)
     MIN_HAN_WORD_LENGTH = 2
-    MAX_HAN_WORD_LENGTH = 5
+    MAX_HAN_WORD_LENGTH = 7
 
     __extra_stop_words = set()
     """精确停止词，完全相等就算"""
@@ -86,6 +86,7 @@ class TagAnalyzer:
         self.__remove_low_freq_tags()
         self.__remove_stop_word_tags()
         self.__remove_stop_regexps()
+        self.__remove_redundant_tags()
         self.__remove_redundant_tags()
         self.__remove_low_freq_tags()
         logging.debug(f"tags count after extract: {len(self.__tags)}")
@@ -194,34 +195,29 @@ class TagAnalyzer:
         :return:
         """
         logging.debug("remove redundant tags...")
-        # 去除两种形式的冗余
-        # 1、吞噬：如“总工程师”出现次数与“工程师”相等，那短词便是无效的，频率差0.95以内可吞噬
-        # 2、分离：如“秦海”出现100，“秦海道”出现20次，则长的词语便是无效的，频率差0.5以下可分离
+        # 去除黏连字
+        # 分离：如“秦海”出现100，“秦海道”出现20次，则长的词语便是无效的，频率差一定系数以下可分离，并将长词次数累加到短词上
         tag_counts = sorted(self.__tags.items(), key=lambda x: x[1] * 1000 - len(x[0]), reverse=True)
         for tag, tag_count in tag_counts:
-            tag_len = len(tag)
-            for i in range(0, tag_len - self.MIN_HAN_WORD_LENGTH + 1):
-                for l in range(2, min(tag_len, tag_len - i + 1)):
-                    sub_tag = tag[i:i + l]
-                    sub_tag_count = self.__tags.get(sub_tag, 0)
-
-                    if tag_count < sub_tag_count * 0.15:
-                        # 被粘上的杂词
-                        # logging.debug(f"remove longer tag: {longer_tag}")
-                        self.__remove_tag(tag)
-                    else:
-                        sub_tag_count -= tag_count
-                        self.__set_tag(sub_tag, sub_tag_count)
+            for sub_tag, begin_pos, end_pos in self.__list_sub_words(tag):
+                sub_tag_count = self.__tags.get(sub_tag, 0)
+                if tag_count < sub_tag_count * 0.1:
+                    # 被粘上的杂词
+                    # logging.debug(f"remove longer tag: {tag} into {sub_tag}")
+                    self.__remove_tag(tag)
+                    self.__set_tag(sub_tag, sub_tag_count + tag_count)
         logging.debug(f"remove redundant tags done, tags: {len(self.__tags)}")
 
-    def __find_sub_word(self, word):
-        for begin in range(1, len(word) - self.MIN_HAN_WORD_LENGTH + 1):
-            for end in range(begin + self.MIN_HAN_WORD_LENGTH, len(word) + 1):
-                sub_word = word[begin:end]
-                sub_weight = self.__dict.get(sub_word, -1)
-                if sub_weight > 0:
-                    return begin, end
-        return -1, 0
+    def __list_sub_words(self, clip):
+        """
+        从一个断句中列举出所有词的组合
+        :param clip:
+        :return:
+        """
+        for begin in range(0, len(clip) - self.MIN_HAN_WORD_LENGTH + 1):
+            for end in range(begin + self.MIN_HAN_WORD_LENGTH, len(clip) + 1):
+                sub_word = clip[begin:end]
+                yield sub_word, begin, end
 
     def tags(self):
         return self.__tags
