@@ -131,7 +131,7 @@ class TagAnalyzer:
                         break
 
                 if word:
-                    # self.__add_tag(word)
+                    self.__add_tag(word)
                     if j > i:
                         self.__extract_not_included_words(clip[i:j])
                     step_i = j - i + len(word)
@@ -264,5 +264,5 @@ if __name__ == '__main__':
     end_time = time.perf_counter()
     logging.info(f"time cost: {end_time - begin_time}")
 
-    for k, v in sorted(cutter.tags().items(), key=lambda x: x[1])[:10000]:
+    for k, v in sorted(cutter.tags().items(), key=lambda x: x[1], reverse=True)[:10000]:
         print(k, v)

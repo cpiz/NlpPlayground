@@ -6,9 +6,11 @@ import jieba.analyse
 
 if __name__ == '__main__':
     with open('res/材料帝国1.txt', 'r', encoding='UTF-8') as file:
-        content = file.read().replace("\n", "")
+        lines = file.readlines()
 
     # cut_all=True【全模式】: 我/ 来到/ 北京/ 清华/ 清华大学/ 华大/ 大学
     # cut_all=False【精确模式】: 我/ 来到/ 北京/ 清华大学
-    seg_list = jieba.cut(content, cut_all=False, HMM=True)
-    print("/".join(seg_list))
+
+    for line in [l.strip() for l in lines if l.strip()]:
+            seg_list = jieba.cut(line, cut_all=False, HMM=True)
+            print("/".join(seg_list))

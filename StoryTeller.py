@@ -4,6 +4,7 @@ import re
 import sys
 import time
 
+from BaiduSpeech import BaiduSpeech
 from DoubleLinkedNode import DoubleLinkedNode
 from tag_analyzer_2 import TagAnalyzer
 
@@ -20,7 +21,7 @@ class SpeakerTalk:
     speaker = ""
     """角色名称"""
 
-    talk = ""
+    line = ""
     """说话内容"""
 
     row_num = 0
@@ -28,20 +29,24 @@ class SpeakerTalk:
 
     in_quote = False
 
-    def __init__(self, row_num, talk):
+    def __init__(self, row_num, line):
         self.row_num = row_num
         self.speaker = ""
-        self.talk = talk
-        self.in_quote = re_word_in_quote.match(talk) is not None
+        self.line = line
+        self.in_quote = re_word_in_quote.match(line) is not None
         # logging.debug((speaker, talk))
 
     def __str__(self):
         speaker = self.speaker if self.speaker else None
-        return f"row[{self.row_num}]{speaker}: {self.talk}"
+        return f"row[{self.row_num}]{speaker}: {self.line}"
 
 
-class SpeakerTalkAnalyzer:
+class StoryTeller:
+    baidu_speech = BaiduSpeech()
     tag_analyzer = TagAnalyzer()
+
+    speaker_tones = {}
+    default_tone = BaiduSpeech.Tone()
     speaker_talks = None
 
     def analyse(self, sentence):
@@ -56,8 +61,8 @@ class SpeakerTalkAnalyzer:
         # 完善发言人
         self.complete_speaker(self.speaker_talks)
 
-        for speak in self.speaker_talks.datas():
-            logging.debug(speak)
+        # for speak in self.speaker_talks.datas():
+        #     logging.debug(speak)
 
     @staticmethod
     def split_to_double_linked(sentence):
@@ -83,6 +88,9 @@ class SpeakerTalkAnalyzer:
 
         return head
 
+    def get_speaker_talks(self):
+        return self.speaker_talks.datas() if self.speaker_talks else None
+
     def complete_speaker(self, node):
         """
         通过上下文内容完善指定结点的发言人
@@ -96,15 +104,15 @@ class SpeakerTalkAnalyzer:
                 # 查找当前对话同一行的后部分
 
                 # if n.next and n.next.data.row_num == n.data.row_num:
-                #     print([word + 1 for word in word, self.tag_analyzer.list_sub_words(n.next.data.talk)])
+                #     print([word + 1 for word in word, self.tag_analyzer.list_sub_words(n.next.data.line)])
 
-                # print(list(map(self.tag_analyzer.get_tag, self.tag_analyzer.list_sub_words(n.next.data.talk))))
+                # print(list(map(self.tag_analyzer.get_tag, self.tag_analyzer.list_sub_words(n.next.data.line))))
 
                 # print(
                 #     [word, self.tag_analyzer.get_tag(word) for word in ])
 
                 # if n.prev and n.prev.data.row_num == n.data.row_num:
-                #     match = re.search("([^？。！]*)：$", n.prev.data.talk)
+                #     match = re.search("([^？。！]*)：$", n.prev.data.line)
                 #     if match:
                 #         prev_says = match.group(1)
                 #         print("/".join(jieba.cut(prev_says)))
@@ -136,14 +144,14 @@ class SpeakerTalkAnalyzer:
     @staticmethod
     def __get_most_possible_speaker_sentence(n):
         if n.next and n.next.data.row_num == n.data.row_num and not n.next.data.in_quote:
-            return n.next.data.talk  # 查找当前对话同一行的后部分
+            return n.next.data.line  # 查找当前对话同一行的后部分
         elif n.prev and n.prev.data.row_num == n.data.row_num and not n.prev.data.in_quote:
-            return n.prev.data.talk  # 查找当前对话同一行的前部分
+            return n.prev.data.line  # 查找当前对话同一行的前部分
         else:
             next = n.next
             while next and next.data.in_quote:
                 next = next.next
-            return next.data.talk if next else None
+            return next.data.line if next else None
 
     @staticmethod
     def combine_over_voice(node):
@@ -152,48 +160,72 @@ class SpeakerTalkAnalyzer:
         :param node: 指定结点
         :return: 返回传入的结点
         """
-
         for n in node.nodes():
             if n.data.in_quote:
                 if n.prev and n.prev.data.row_num == n.data.row_num \
-                        and not re_end_with_noword.match(n.prev.data.talk):
+                        and not re_end_with_noword.match(n.prev.data.line):
                     # 排除简单引用的情况，如：在整个科学院系统都素有“鬼才”之称，“鬼才”就不是对话内容
                     # 规则是与前文直接连续，无换行符或标点间隔
-                    n.prev.data.talk += n.data.talk  # 合并内容
+                    n.prev.data.line += n.data.line  # 合并内容
                     n.delete()
 
                     if n.next and n.next.data.row_num == n.data.row_num:
-                        n.prev.data.talk += n.next.data.talk
+                        n.prev.data.line += n.next.data.line
                         n.next.delete()
 
         return node
 
+    def set_tone(self, speaker_name, tone):
+        self.speaker_tones[speaker_name] = tone
+
+    def set_default_tone(self, tone):
+        self.default_tone = tone
+
+    def play(self, book_path):
+        try:
+            with open(book_path, 'r', encoding='UTF-8') as file:
+                content = file.read()
+        except UnicodeDecodeError:
+            with open(book_path, 'r', encoding='gb18030', errors='ignore') as file:
+                content = file.read()
+        self.analyse(content)
+
+        for speak_talk in teller.get_speaker_talks():
+            if speak_talk.speaker not in self.speaker_tones:
+                tone = self.default_tone.clone()
+                tone.alias = speak_talk.speaker
+                self.speaker_tones[speak_talk.speaker] = tone
+            self.baidu_speech.append_speech(speak_talk.line, self.speaker_tones[speak_talk.speaker])
+        self.baidu_speech.play()
+
 
 if __name__ == '__main__':
     time_begin = time.perf_counter()
+    book = 'res/材料帝国1.txt'
+    # book = 'res/test_book.txt'
+    # book = 'res/材料帝国.txt'
+    # book = 'D:\\OneDrive\\Books\\临高启明.txt'
+    # book = 'E:\\BaiduCloud\\Books\\庆余年.txt'
+    # book = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
+    # book = 'D:\\OneDrive\\Books\\重生之官路商途原稿加最好的蛇足续版.txt'
+    # book = 'E:\\BaiduCloud\\Books\\兽血沸腾.txt'
+    # book = 'E:\\BaiduCloud\\Books\\将夜.txt'
+    # book = 'E:\\BaiduCloud\\Books\\流氓高手II.txt'
+    # book = 'E:\\BaiduCloud\\Books\\紫川.txt'
+    # book = 'E:\\BaiduCloud\\Books\\活色生香.txt'
+    # book = 'E:\\BaiduCloud\\Books\\弹痕.txt'
+    teller = StoryTeller()
 
-    analyzer = SpeakerTalkAnalyzer()
+    # 默认女声旁边
+    voice_over_tone = BaiduSpeech.Tone('VoiceOver')
+    voice_over_tone.per = 0  # 女声
+    teller.set_tone('VoiceOver', voice_over_tone)
 
-    book_path = 'res/材料帝国1.txt'
-    # book_path = 'res/test_book.txt'
-    # book_path = 'res/材料帝国.txt'
-    # book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
-    # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
-    # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
-    # book_path = 'D:\\OneDrive\\Books\\重生之官路商途原稿加最好的蛇足续版.txt'
-    # book_path = 'E:\\BaiduCloud\\Books\\兽血沸腾.txt'
-    # book_path = 'E:\\BaiduCloud\\Books\\将夜.txt'
-    # book_path = 'E:\\BaiduCloud\\Books\\流氓高手II.txt'
-    # book_path = 'E:\\BaiduCloud\\Books\\紫川.txt'
-    # book_path = 'E:\\BaiduCloud\\Books\\活色生香.txt'
-    # book_path = 'E:\\BaiduCloud\\Books\\弹痕.txt'
-    try:
-        with open(book_path, 'r', encoding='UTF-8') as file:
-            content = file.read()
-    except UnicodeDecodeError:
-        with open(book_path, 'r', encoding='gb18030', errors='ignore') as file:
-            content = file.read()
-    analyzer.analyse(content)
+    # 其他角色默认男声
+    default_tone = BaiduSpeech.Tone()
+    default_tone.per = 1  # 默认普通男生
+    teller.set_default_tone(default_tone)
 
+    teller.play(book)
     time_end = time.perf_counter()
     logging.info(f"time cost: {time_end - time_begin}")
