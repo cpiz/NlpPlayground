@@ -138,7 +138,8 @@ class StoryTeller:
         if len(frags) == 0:
             return ''
 
-        speaker = sorted(frags.items(), key=lambda x: x[1], reverse=True)[0][0]
+        # speaker = sorted(frags.items(), key=lambda x: x[1], reverse=True)[0][0]
+        speaker = list(frags.keys())[0]
         return speaker
 
     @staticmethod
@@ -218,8 +219,13 @@ if __name__ == '__main__':
 
     # 默认女声旁边
     voice_over_tone = BaiduSpeech.Tone('VoiceOver')
-    voice_over_tone.per = 0  # 女声
+    voice_over_tone.per = 3  # 女声
     teller.set_tone('VoiceOver', voice_over_tone)
+
+    qinhai_tone = BaiduSpeech.Tone('秦海')
+    qinhai_tone.per = 1  # 普通男生
+    qinhai_tone.pit = 8  # 音调加高，声音更年轻
+    teller.set_tone('秦海', qinhai_tone)
 
     # 其他角色默认男声
     default_tone = BaiduSpeech.Tone()

@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sys
 import threading
 from time import sleep, time
@@ -23,7 +24,8 @@ API_KEY = 'OTTnHiPsNxpQ9Id68qfhhVwO'
 # 填写网页上申请的APP SECRET 如 SECRET_KEY="94dc99566550d87f8fa8ece112xxxxx"
 SECRET_KEY = '94Y6bfKczlU00ZyNkE3ESdkzkD1rxtPV'
 
-TEXT = "一二三四五，上山打老虎，老虎没打着，打着小松鼠"
+re_end_with_exclamation = re.compile('“.*[！!]”')
+re_word_in_quote = re.compile("(“.*?”)")
 
 
 class BaiduSpeech:
@@ -87,6 +89,18 @@ class BaiduSpeech:
         if not self.__access_token:
             self.__request_auth()
 
+        spd_adjust = 0
+        vol_adjust = 0
+        pit_adjust = 0
+
+        if re_word_in_quote.match(text):
+            # 对白句，提速
+            spd_adjust += 1
+
+            if re_end_with_exclamation.match(text):
+                # 感叹句，增加音量
+                vol_adjust += 5
+
         r = self.__get_http_session().post("https://tsn.baidu.com/text2audio",
                                            data={
                                                'tex': quote(text),
@@ -94,9 +108,9 @@ class BaiduSpeech:
                                                'cuid': 'jamen',
                                                'ctp': '1',
                                                'lan': 'zh',
-                                               'spd': tone.spd,
-                                               'pit': tone.pit,
-                                               'vol': tone.vol,
+                                               'spd': tone.spd + spd_adjust,
+                                               'pit': tone.pit + pit_adjust,
+                                               'vol': tone.vol + vol_adjust,
                                                'per': tone.per,
                                                'aue': '3'
                                                # tex	必填	合成的文本，使用UTF-8编码。小于2048个中文字或者英文数字。（文本在百度服务器内转换为GBK后，长度必须小于4096字节）
@@ -161,8 +175,8 @@ class BaiduSpeech:
                 text, tone, audio = self.__play_list.pop(0)
                 logging.debug(f"play {audio}[{tone.alias}]{text}")
                 self.__play_audio(audio)
-                if os.path.exists(audio):
-                    os.remove(audio)
+                # if os.path.exists(audio):
+                #     os.remove(audio)
                 idle = False
 
             if idle:
