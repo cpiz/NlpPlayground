@@ -6,7 +6,7 @@ import time
 
 from BaiduSpeech import BaiduSpeech
 from DoubleLinkedNode import DoubleLinkedNode
-from tag_analyzer_2 import TagAnalyzer
+from tag_analyzer import TagAnalyzer
 
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
@@ -98,26 +98,6 @@ class StoryTeller:
         for n in node.nodes():
             if n.data.in_quote:
                 # 未被括号引用的内容，即对话
-
-                # 分析说话者
-
-                # 查找当前对话同一行的后部分
-
-                # if n.next and n.next.data.row_num == n.data.row_num:
-                #     print([word + 1 for word in word, self.tag_analyzer.list_sub_words(n.next.data.line)])
-
-                # print(list(map(self.tag_analyzer.get_tag, self.tag_analyzer.list_sub_words(n.next.data.line))))
-
-                # print(
-                #     [word, self.tag_analyzer.get_tag(word) for word in ])
-
-                # if n.prev and n.prev.data.row_num == n.data.row_num:
-                #     match = re.search("([^？。！]*)：$", n.prev.data.line)
-                #     if match:
-                #         prev_says = match.group(1)
-                #         print("/".join(jieba.cut(prev_says)))
-
-                # TODO: 分析说话者
                 speaker = self.__get_most_possible_speaker(self.__get_most_possible_speaker_sentence(n))
             else:
                 # 未被括号引用的内容，都是画外音

@@ -4,6 +4,8 @@ import re
 import sys
 import time
 
+import jamen_utils
+
 logging.basicConfig(
     stream=sys.stderr,
     level=logging.DEBUG,
@@ -99,7 +101,6 @@ class TagAnalyzer:
 
             if self.__re_eng.match(clip):
                 # 英文单词，直接入标签
-
                 self.__add_tag(clip)
                 continue
 
@@ -242,7 +243,7 @@ if __name__ == '__main__':
     begin_time = time.perf_counter()
     cutter = TagAnalyzer()
     # book_path = 'res/test_book.txt'
-    book_path = 'res/材料帝国.txt'
+    book_path = 'res/材料帝国1.txt'
     # book_path = 'res/材料帝国1.txt'
     # book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
@@ -254,12 +255,7 @@ if __name__ == '__main__':
     # book_path = 'E:\\BaiduCloud\\Books\\紫川.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\活色生香.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\弹痕.txt'
-    try:
-        with open(book_path, 'r', encoding='UTF-8') as file:
-            content = file.read()
-    except UnicodeDecodeError:
-        with open(book_path, 'r', encoding='gb18030', errors='ignore') as file:
-            content = file.read()
+    content = jamen_utils.load_text(book_path)
     cutter.analyse(content)
     end_time = time.perf_counter()
     logging.info(f"time cost: {end_time - begin_time}")
