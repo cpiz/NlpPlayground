@@ -182,7 +182,7 @@ class StoryTeller:
 
 if __name__ == '__main__':
     time_begin = time.perf_counter()
-    book = 'res/材料帝国1.txt'
+    book = 'res/材料帝国.txt'
     # book = 'res/test_book.txt'
     # book = 'res/材料帝国.txt'
     # book = 'D:\\OneDrive\\Books\\临高启明.txt'
@@ -197,19 +197,24 @@ if __name__ == '__main__':
     # book = 'E:\\BaiduCloud\\Books\\弹痕.txt'
     teller = StoryTeller()
 
-    # 默认女声旁边
+    # 默认旁白
     voice_over_tone = BaiduSpeech.Tone('VoiceOver')
-    voice_over_tone.per = 3  # 女声
+    voice_over_tone.per = 3
     teller.set_tone('VoiceOver', voice_over_tone)
 
     qinhai_tone = BaiduSpeech.Tone('秦海')
     qinhai_tone.per = 1  # 普通男生
-    qinhai_tone.pit = 8  # 音调加高，声音更年轻
+    qinhai_tone.pit = 6  # 音调加高，声音更年轻
     teller.set_tone('秦海', qinhai_tone)
 
-    # 其他角色默认男声
+    qinhai_tone = BaiduSpeech.Tone('王晓晨')
+    qinhai_tone.per = 0  # 普通女性
+    qinhai_tone.pit = 5
+    teller.set_tone('王晓晨', qinhai_tone)
+
+    # 默认声
     default_tone = BaiduSpeech.Tone()
-    default_tone.per = 1  # 默认普通男生
+    default_tone.per = 1
     teller.set_default_tone(default_tone)
 
     teller.play(book)
