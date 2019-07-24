@@ -21,19 +21,17 @@ class JamenCutter:
     MAX_HAN_WORD_LENGTH = 0xFFFFFFF
 
     __dict = {}  # 完整字典
-    __extra_stop_words = set()
-    """精确停止词，完全相等就算"""
-    __stop_regex = re.compile("")
-    """停止词正则式"""
+    __not_included_regex = re.compile("")
+    """未收录词正则式"""
     __tags = {}
 
     def __init__(self):
         self.__load_dict('dict\\chinese.dict')
         self.__load_dict('dict\\chinese_regions.dict')
         self.__load_dict('dict\\world_countries.dict')
-        self.__load_extra_stop_words('data/stop_words.txt')
-        self.__load_stop_words_regex('data/stop_regexps.txt')
-        logging.info(f"stop words count: {len(self.__extra_stop_words)}")
+        self.__load_dict('data/stop_words.txt')
+        self.__load_not_included_regex('data/not_included_regexps.txt')
+        logging.info(f"dict words count: {len(self.__dict)}")
 
     def __load_dict(self, dict_path):
         logging.debug(f"load dict['{dict_path}']...")
@@ -55,14 +53,7 @@ class JamenCutter:
                         self.__dict[frag] = 0  # 不完整的词权重为0
         logging.debug(f"load dict['{dict_path}'] done, size: {len(self.__dict)} ")
 
-    def __load_extra_stop_words(self, dict_path):
-        """加载精确停止词字典"""
-        with open(dict_path, 'r', encoding='UTF-8') as f:
-            for word in [l.strip() for l in f if l.strip()]:
-                self.__extra_stop_words.add(word)
-                # self.__dict[word] = 1
-
-    def __load_stop_words_regex(self, dict_path):
+    def __load_not_included_regex(self, dict_path):
         """加载模糊停止词正则式"""
         reg_str = ""
         with open(dict_path, 'r', encoding='UTF-8') as f:
@@ -74,7 +65,7 @@ class JamenCutter:
                 if len(reg_str) != 0:
                     reg_str += '|'
                 reg_str += exp
-        self.__stop_regex = re.compile(f"({reg_str})", re.U)
+        self.__not_included_regex = re.compile(f"({reg_str})", re.U)
         # self.__stop_regex = re.compile(f"{reg_str}", re.U)
 
     def cut(self, sentence):
@@ -127,7 +118,7 @@ class JamenCutter:
         if len(bonded_word) == 1:
             yield bonded_word
         else:
-            words = self.__stop_regex.split(bonded_word)
+            words = self.__not_included_regex.split(bonded_word)
             for word in words:
                 if word:
                     yield word
@@ -179,9 +170,8 @@ if __name__ == '__main__':
     # book_path = 'E:\\BaiduCloud\\Books\\紫川.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\活色生香.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\弹痕.txt'
-    content = jamen_utils.load_text(book_path)
-    print("/".join(cutter.cut(content)))
-    # print("/".join(cutter.cut('路边一位戴着眼镜的文化人')))
+    print("/".join(cutter.cut(jamen_utils.load_text(book_path))))
+    # print("/".join(cutter.cut('当下雨天地面积水分外严重')))
     # print("/".join(cutter.cut('路边一位戴着眼镜蛇的文化人')))
     end_time = time.perf_counter()
     logging.info(f"time cost: {end_time - begin_time}")
