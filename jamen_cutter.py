@@ -14,26 +14,27 @@ logging.basicConfig(
 
 
 class JamenCutter:
-    __re_block = re.compile("([\u4E00-\u9FD5]+|[a-zA-Z0-9_\\-]+)", re.U)
-    __re_eng = re.compile("[a-zA-Z_\\-]+", re.U)
-    __re_han = re.compile("[\u4E00-\u9FD5]+", re.U)
+    _re_block = re.compile("([\u4E00-\u9FD5]+|[a-zA-Z0-9_\\-]+)", re.U)
+    _re_eng = re.compile("[a-zA-Z_\\-]+", re.U)
+    _re_han = re.compile("[\u4E00-\u9FD5]+", re.U)
     MIN_HAN_WORD_LENGTH = 1
     MAX_HAN_WORD_LENGTH = 0xFFFFFFF
 
-    __dict = {}  # 完整字典
-    __not_included_regex = re.compile("")
+    _dict = {}  # 完整字典
+    _not_included_regex = re.compile("")
     """未收录词正则式"""
-    __tags = {}
 
     def __init__(self):
-        self.__load_dict('dict\\chinese.dict')
-        self.__load_dict('dict\\chinese_regions.dict')
-        self.__load_dict('dict\\world_countries.dict')
-        self.__load_dict('data/stop_words.txt')
-        self.__load_not_included_regex('data/not_included_regexps.txt')
-        logging.info(f"dict words count: {len(self.__dict)}")
+        self._load_dict('dict\\chinese.dict', self._dict)
+        self._load_dict('dict\\chinese_regions.dict', self._dict)
+        self._load_dict('dict\\world_countries.dict', self._dict)
+        self._load_dict('dict\\chinese_colleges.dict', self._dict)
+        self._load_dict('data\\stop_words.txt', self._dict)
+        self.__load_not_included_regex('data\\not_included_regexps.txt')
+        logging.info(f"dict words count: {len(self._dict)}")
 
-    def __load_dict(self, dict_path):
+    @staticmethod
+    def _load_dict(dict_path, name_dict):
         logging.debug(f"load dict['{dict_path}']...")
         with open(dict_path, 'r', encoding='UTF-8') as f:
             for word in [l.strip() for l in f if l.strip()]:
@@ -41,17 +42,14 @@ class JamenCutter:
                     # 忽略注释
                     continue
 
-                if len(word) > self.MAX_HAN_WORD_LENGTH:
-                    continue
+                name_dict[word] = 1  # 完全匹配次权重为1
 
-                self.__dict[word] = 1
-
-                # 将不完整的词也加入词典，方便搜索
-                for i in range(self.MIN_HAN_WORD_LENGTH, len(word)):
+                # 构建前缀词典
+                for i in range(1, len(word)):
                     frag = word[:i]
-                    if frag not in self.__dict.keys():
-                        self.__dict[frag] = 0  # 不完整的词权重为0
-        logging.debug(f"load dict['{dict_path}'] done, size: {len(self.__dict)} ")
+                    if frag not in name_dict.keys():
+                        name_dict[frag] = 0  # 前缀词权重为0
+        logging.debug(f"load dict['{dict_path}'] done, size: {len(name_dict)} ")
 
     def __load_not_included_regex(self, dict_path):
         """加载模糊停止词正则式"""
@@ -65,35 +63,39 @@ class JamenCutter:
                 if len(reg_str) != 0:
                     reg_str += '|'
                 reg_str += exp
-        self.__not_included_regex = re.compile(f"({reg_str})", re.U)
+        self._not_included_regex = re.compile(f"({reg_str})", re.U)
         # self.__stop_regex = re.compile(f"{reg_str}", re.U)
 
-    def cut(self, sentence):
-        clips = self.__re_block.split(sentence)  # 切分成不包含标点的片段
+    def cut_with_prop(self, sentence):
+        clips = self._re_block.split(sentence)  # 切分成不包含标点的片段
         for clip in clips:
             if not clip:
                 continue
 
-            if self.__re_eng.match(clip):
+            if self._re_eng.match(clip):
                 # 英文单词，直接入标签
-                yield clip
+                yield clip, 'eng'
                 continue
 
-            if self.__re_han.match(clip):
-                for frag in self.__cut_chn(clip, bond=True):
-                    yield frag
+            if self._re_han.match(clip):
+                for frag, prop in self._cut_chn(clip, bond=True):
+                    yield frag, prop
             else:
-                yield clip
+                yield clip, 'x'
 
-    def __cut_chn(self, clip, bond=False):
+    def cut(self, sentence):
+        for word, prop in self.cut_with_prop(sentence):
+            yield word
+
+    def _cut_chn(self, clip, bond=False):
         """
         将中文句子切分成词
         :param clip: 句子
         :param bond: 是否黏合单字
         :return:
         """
-        dag = self.__build_dag(clip)
-        route = self.__calc_route(clip, dag)
+        dag = self._build_dag(clip)
+        route = self._calc_route(clip, dag)
 
         i = 0
         n = len(clip)
@@ -105,25 +107,25 @@ class JamenCutter:
                 buf += frag
             else:
                 if buf:
-                    for t in self.__cut_bonded(buf):
-                        yield t
+                    for t in self._cut_bonded(buf):
+                        yield t, 'x'
                     buf = ''
-                yield frag
+                yield frag, 'word'
             i = j
         if buf:
-            for t in self.__cut_bonded(buf):
-                yield t
+            for t in self._cut_bonded(buf):
+                yield t, 'x'
 
-    def __cut_bonded(self, bonded_word):
+    def _cut_bonded(self, bonded_word):
         if len(bonded_word) == 1:
             yield bonded_word
         else:
-            words = self.__not_included_regex.split(bonded_word)
+            words = self._not_included_regex.split(bonded_word)
             for word in words:
                 if word:
                     yield word
 
-    def __build_dag(self, clip):
+    def _build_dag(self, clip):
         dag = {}
         n = len(clip)
         for i in range(n):
@@ -131,7 +133,7 @@ class JamenCutter:
             dag[i] = ends
             for j in range(i + 1, n + 1):
                 frag = clip[i:j]
-                frag_weight = self.__dict.get(frag, -1)
+                frag_weight = self._dict.get(frag, -1)
                 if j == i + 1 or frag_weight > 0:
                     ends.append(j - 1)
                 elif frag_weight < 0:
@@ -139,7 +141,7 @@ class JamenCutter:
         return dag
 
     # noinspection PyMethodMayBeStatic
-    def __calc_route(self, clip, dag):
+    def _calc_route(self, clip, dag):
         route = {}
         n = len(dag)
         route[n] = (0, 0)  # 方便计算时不溢出

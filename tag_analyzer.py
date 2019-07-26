@@ -33,8 +33,9 @@ class TagAnalyzer:
         self.__load_dict('dict\\chinese.dict')
         self.__load_dict('dict\\chinese_regions.dict')
         self.__load_dict('dict\\world_countries.dict')
-        self.__load_extra_stop_words('data/stop_words.txt')
-        self.__load_stop_words_regex('data/not_included_regexps.txt')
+        self.__load_dict('dict\\chinese_colleges.dict')
+        self.__load_extra_stop_words('data\\stop_words.txt')
+        self.__load_stop_words_regex('data\\not_included_regexps.txt')
         logging.info(f"stop words count: {len(self.__extra_stop_words)}")
 
     def __load_dict(self, dict_path):
