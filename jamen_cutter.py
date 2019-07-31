@@ -2,6 +2,7 @@ import logging
 import re
 import sys
 import time
+from math import log
 
 import jamen_utils
 
@@ -21,35 +22,55 @@ class JamenCutter:
     MAX_HAN_WORD_LENGTH = 0xFFFFFFF
 
     _dict = {}  # 完整字典
+    _total_weight = 0
+    _chinese_family_names = {}
+    _chinese_given_names = {}
+    _chinese_name_prefixes = {}
+    _chinese_name_suffixes = {}
+    _japanese_names = {}
+    _english_names = {}
+
     _not_included_regex = re.compile("")
     """未收录词正则式"""
 
     def __init__(self):
+        self._load_dict('dict\\jieba_without_nr.dict', self._dict)
         self._load_dict('dict\\chinese.dict', self._dict)
         self._load_dict('dict\\chinese_regions.dict', self._dict)
         self._load_dict('dict\\world_countries.dict', self._dict)
         self._load_dict('dict\\chinese_colleges.dict', self._dict)
-        self._load_dict('data\\stop_words.txt', self._dict)
+        self._load_dict('dict\\chinese_stop_words.dict', self._dict)
+        # self._load_dict('dict\\japanese_names.dict', self._japanese_names)
+        # self._load_dict('dict\\english_names.dict', self._english_names)
         self.__load_not_included_regex('data\\not_included_regexps.txt')
+
+        self._load_dict('dict\\chinese_family_names.dict', self._chinese_family_names)
+        self._load_dict('dict\\chinese_given_names.dict', self._chinese_given_names)
+        self._load_dict('dict\\chinese_name_prefixes.dict', self._chinese_name_prefixes)
+        self._load_dict('dict\\chinese_name_suffixes.dict', self._chinese_name_suffixes)
+
         logging.info(f"dict words count: {len(self._dict)}")
 
-    @staticmethod
-    def _load_dict(dict_path, name_dict):
+    def _load_dict(self, dict_path, dict):
         logging.debug(f"load dict['{dict_path}']...")
         with open(dict_path, 'r', encoding='UTF-8') as f:
-            for word in [l.strip() for l in f if l.strip()]:
-                if word[:1] == '#':
+            for line in [l.strip() for l in f if l.strip()]:
+                if line[:1] == '#':
                     # 忽略注释
                     continue
 
-                name_dict[word] = 1  # 完全匹配次权重为1
+                word, weight, prop = (line + '  ').split(' ')[:3]
+                weight = int(weight) if weight else 1
+                if word not in dict:
+                    dict[word] = weight, prop
+                    self._total_weight += weight
 
                 # 构建前缀词典
-                for i in range(1, len(word)):
+                for i in range(1, len(line)):
                     frag = word[:i]
-                    if frag not in name_dict.keys():
-                        name_dict[frag] = 0  # 前缀词权重为0
-        logging.debug(f"load dict['{dict_path}'] done, size: {len(name_dict)} ")
+                    if frag not in dict:
+                        dict[frag] = 0, ''  # 前缀词权重为0
+        logging.debug(f"load dict['{dict_path}'] done, size: {len(dict)} ")
 
     def __load_not_included_regex(self, dict_path):
         """加载模糊停止词正则式"""
@@ -110,7 +131,7 @@ class JamenCutter:
                     for t in self._cut_bonded(buf):
                         yield t, 'x'
                     buf = ''
-                yield frag, 'word'
+                yield frag, route[i][4]
             i = j
         if buf:
             for t in self._cut_bonded(buf):
@@ -133,10 +154,28 @@ class JamenCutter:
             dag[i] = ends
             for j in range(i + 1, n + 1):
                 frag = clip[i:j]
-                frag_weight = self._dict.get(frag, -1)
-                if j == i + 1 or frag_weight > 0:
-                    ends.append(j - 1)
-                elif frag_weight < 0:
+
+                word_weight, word_prop = self._dict.get(frag, (-1, ''))
+                if j == i + 1 or word_weight > 0:  # 没有采用jieba的人名词性，错误很多
+                    ends.append((j - 1, max(0, word_weight), word_prop))
+                    continue
+
+                japanese_name_weight, prop = self._japanese_names.get(frag, (-1, ''))
+                if japanese_name_weight > 0:
+                    ends.append((j - 1, japanese_name_weight, 'nr'))
+                    continue
+
+                english_name_weight, prop = self._english_names.get(frag, (-1, ''))
+                if english_name_weight > 0:
+                    ends.append((j - 1, english_name_weight, 'nr'))
+                    continue
+
+                chinese_name_weight = self._get_chinese_name(frag)
+                if chinese_name_weight > 0:
+                    ends.append((j - 1, chinese_name_weight, 'nr'))
+                    continue
+
+                if word_weight < 0 and chinese_name_weight < 0 and japanese_name_weight:
                     break
         return dag
 
@@ -144,24 +183,110 @@ class JamenCutter:
     def _calc_route(self, clip, dag):
         route = {}
         n = len(dag)
-        route[n] = (0, 0)  # 方便计算时不溢出
+        total_log_weight = log(self._total_weight)
+        route[n] = (0, 0, '', 0, '')  # 方便计算时不溢出
+        rt = {}
         for i in range(n - 1, -1, -1):
             # jieba的处理参考
             # route[idx] = max((log(self.FREQ.get(sentence[idx:x + 1]) or 1) -
             #                   logtotal + route[x + 1][0], x) for x in DAG[idx])
 
             # 动态规划，用词长做频度
-            route[i] = max((-i + route[x + 1][0], x) for x in dag[i])
+            # route[i] = max(((k - i + 1) + route[k + 1][0], k, clip[i:k + 1], weight, prop)
+            #                for k, weight, prop in dag[i])
+
+            # 向jieba妥协了
+            route[i] = max((log(weight or 1) - total_log_weight + route[k + 1][0], k, clip[i:k + 1], weight, prop)
+                           for k, weight, prop in dag[i])
+
+            rt[i] = [(log(weight or 1) - total_log_weight + route[k + 1][0], k, clip[i:k + 1],
+                      log(weight or 1) - total_log_weight, prop) for k, weight, prop in dag[i]]
+
         del (route[n])
         return route
+
+    def _get_chinese_name(self, str):
+        max_weight = -1
+        n = len(str)
+        for name_prefix, name_prefix_weight in self._match_prefix_dict(str, self._chinese_name_prefixes, 0):
+            i = len(name_prefix)
+
+            for family_name, family_name_weight in self._match_prefix_dict(str, self._chinese_family_names, i):
+                j = i + len(family_name)
+                if j == n:
+                    max_weight = max(max_weight, family_name_weight)
+                    continue
+                elif family_name_weight == 0:
+                    continue
+                elif name_prefix and family_name:
+                    continue
+
+                for given_name, given_name_weight in self._match_prefix_dict(str, self._chinese_given_names, j):
+                    if name_prefix and not family_name and len(given_name) > 1:
+                        continue  # 前缀通常带单姓或单名或直接带后缀，不会带双名
+
+                    k = j + len(given_name)
+                    if k == n:
+                        max_weight = max(max_weight, given_name_weight)
+                        continue
+                    elif given_name_weight == 0:
+                        continue
+
+                    if name_prefix and family_name:
+                        continue  # 超过两个部分则已经是较完整名字，无须再带后缀
+                    elif given_name:
+                        continue  # 有名了也无须带后缀
+                    else:
+                        for name_suffix, suffix_weight in self._match_prefix_dict(str, self._chinese_name_suffixes, k):
+                            m = k + len(name_suffix)
+                            if m == n:
+                                max_weight = max(max_weight, suffix_weight)
+
+        return (max_weight if len(str) > 2 else 60) if max_weight > 0 else max_weight
+
+    @staticmethod
+    def _match_prefix_dict(str, prefix_dict, begin=0):
+        for end in range(begin + 1, len(str) + 1):
+            tmp = str[begin:end]
+            x, prop = prefix_dict.get(tmp, (-1, ''))
+            if x >= 0:
+                yield tmp, x
+            if x < 0:
+                break
+        yield '', 1
+
+    def extract_names(self, sentence):
+        """
+        提炼姓名
+        :param sentence:
+        :return:
+        """
+        names = {}
+        for tag, prop in self.cut_with_prop(sentence):
+            if prop == 'nr':
+                names[tag] = names.get(tag, 0) + 1
+
+        # 剔除一些跟高频名字粘结的低频名字，比如“秦海”与“秦海道”
+        for name, count in sorted(names.items(), key=lambda x: len(x[0]), reverse=True):
+            for n in range(len(name) - 1, 1, -1):
+                for b in range(0, len(name) - n + 1):
+                    sub_name = name[b:b + n]
+                    sub_name_count = names.get(sub_name, 0)
+                    if sub_name_count * 0.2 > count:
+                        names[name] = 0
+                        names[sub_name] = sub_name_count + count
+
+        for name, count in sorted(names.items(), key=lambda x: x[1], reverse=True):
+            if count:
+                yield name, count
 
 
 if __name__ == '__main__':
     begin_time = time.perf_counter()
     cutter = JamenCutter()
     # book_path = 'res/test_book.txt'
-    book_path = 'res/材料帝国1.txt'
     # book_path = 'res/材料帝国1.txt'
+    book_path = 'res/材料帝国.txt'
     # book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
@@ -172,8 +297,25 @@ if __name__ == '__main__':
     # book_path = 'E:\\BaiduCloud\\Books\\紫川.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\活色生香.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\弹痕.txt'
-    print("/".join(cutter.cut(jamen_utils.load_text(book_path))))
-    # print("/".join(cutter.cut('当下雨天地面积水分外严重')))
+
+    # print("/".join(cutter.cut(jamen_utils.load_text(book_path))))
+    # print("/".join(cutter.cut('秦海诧异道')))
+    # print("/".join(cutter.cut('秦明华一上车')))
+    # print("/".join(cutter.cut('秦海能够让')))
+    # print("/".join(cutter.cut('秦海能够让陈贺千都感到佩服')))
+    # print("/".join(cutter.cut('宁厂长上街去吗')))
+    # print("/".join(cutter.cut('翟建国是有备而来')))
+    # print("/".join(cutter.cut('路边一位戴着眼镜的文化人')))
     # print("/".join(cutter.cut('路边一位戴着眼镜蛇的文化人')))
+    # print("/".join(cutter.cut('着眼镜')))
+    # print("/".join(cutter.cut('柴培德道：“像韦宝林这种没有能力、光会吹牛的干部，我早就想动一动了。”')))
+    # print("/".join(cutter.cut('徐扬笑道：“柴市长，您有没有听过老百姓是如何评价这些干部的？”')))
+    # print("/".join(cutter.cut('发出呛哴哴的金属撞击声')))
+    # print("/".join(cutter.cut('我这车正好能坐下四个人')))
+    print("/".join(cutter.cut('周工真的不想')))
+
+    # for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
+    #     print((name, count))
+
     end_time = time.perf_counter()
     logging.info(f"time cost: {end_time - begin_time}")

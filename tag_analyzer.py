@@ -34,7 +34,7 @@ class TagAnalyzer:
         self.__load_dict('dict\\chinese_regions.dict')
         self.__load_dict('dict\\world_countries.dict')
         self.__load_dict('dict\\chinese_colleges.dict')
-        self.__load_extra_stop_words('data\\stop_words.txt')
+        self.__load_extra_stop_words('data\\chinese_stop_words.dict')
         self.__load_stop_words_regex('data\\not_included_regexps.txt')
         logging.info(f"stop words count: {len(self.__extra_stop_words)}")
 
@@ -244,7 +244,7 @@ if __name__ == '__main__':
     begin_time = time.perf_counter()
     cutter = TagAnalyzer()
     # book_path = 'res/test_book.txt'
-    book_path = 'res/材料帝国1.txt'
+    book_path = 'res/材料帝国.txt'
     # book_path = 'res/材料帝国1.txt'
     # book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
