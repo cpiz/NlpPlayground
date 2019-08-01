@@ -1,4 +1,7 @@
+import hashlib
 import logging
+import marshal
+import os
 import re
 import sys
 import time
@@ -34,22 +37,59 @@ class JamenCutter:
     """未收录词正则式"""
 
     def __init__(self):
-        self._load_dict('dict\\jieba_without_nr.dict', self._dict)
-        self._load_dict('dict\\chinese.dict', self._dict)
-        self._load_dict('dict\\chinese_regions.dict', self._dict)
-        self._load_dict('dict\\world_countries.dict', self._dict)
-        self._load_dict('dict\\chinese_colleges.dict', self._dict)
-        self._load_dict('dict\\chinese_stop_words.dict', self._dict)
-        # self._load_dict('dict\\japanese_names.dict', self._japanese_names)
-        # self._load_dict('dict\\english_names.dict', self._english_names)
+        self._load_dicts_with_cache([
+            'dict\\jieba_without_nr.dict',
+            'dict\\chinese.dict',
+            'dict\\chinese_regions.dict',
+            'dict\\world_countries.dict',
+            'dict\\chinese_colleges.dict',
+            'dict\\chinese_stop_words.dict',
+        ], self._dict)
+
+        for v in self._dict.values():
+            self._total_weight += v[0]
+        logging.info(f"dict words count: {len(self._dict)}")
+
+        self._load_dicts_with_cache(['dict\\japanese_names.dict'], self._japanese_names)
+        self._load_dicts_with_cache(['dict\\english_names.dict'], self._english_names)
+        self._load_dicts_with_cache(['dict\\chinese_family_names.dict'], self._chinese_family_names)
+        self._load_dicts_with_cache(['dict\\chinese_given_names.dict'], self._chinese_given_names)
+        self._load_dicts_with_cache(['dict\\chinese_name_prefixes.dict'], self._chinese_name_prefixes)
+        self._load_dicts_with_cache(['dict\\chinese_name_suffixes.dict'], self._chinese_name_suffixes)
         self.__load_not_included_regex('data\\not_included_regexps.txt')
 
-        self._load_dict('dict\\chinese_family_names.dict', self._chinese_family_names)
-        self._load_dict('dict\\chinese_given_names.dict', self._chinese_given_names)
-        self._load_dict('dict\\chinese_name_prefixes.dict', self._chinese_name_prefixes)
-        self._load_dict('dict\\chinese_name_suffixes.dict', self._chinese_name_suffixes)
+    def _load_dicts_with_cache(self, dict_path_list, dict, with_cache=True):
+        cache_file_path = ''
+        need_update = False
 
-        logging.info(f"dict words count: {len(self._dict)}")
+        if with_cache:
+            cache_dir = "tmp"
+            jamen_utils.makesure_dir(cache_dir)
+            cache_file_name = hashlib.sha1((",".join(dict_path_list)).encode('utf-8')).hexdigest()
+            cache_file_path = os.path.join(cache_dir, cache_file_name)
+
+            if not os.path.exists(cache_file_path):
+                need_update = True
+            else:
+                cache_modify_time = os.path.getmtime(cache_file_path)
+                for dict_path in dict_path_list:
+                    modify_time = os.path.getmtime(dict_path)
+                    if modify_time > cache_modify_time:
+                        need_update = True
+                        break
+
+        if with_cache and not need_update:
+            with open(cache_file_path, 'rb') as file:
+                dict.update(marshal.load(file))
+                logging.debug(f"load dict from cache '{cache_file_path}'")
+        else:
+            for dict_path in dict_path_list:
+                self._load_dict(dict_path, dict)
+
+        if with_cache and need_update:
+            with open(cache_file_path, 'wb') as file:
+                marshal.dump(dict, file)
+                logging.debug(f"dump dict into cache '{cache_file_path}'")
 
     def _load_dict(self, dict_path, dict):
         logging.debug(f"load dict['{dict_path}']...")
@@ -63,7 +103,6 @@ class JamenCutter:
                 weight = int(weight) if weight else 1
                 if word not in dict:
                     dict[word] = weight, prop
-                    self._total_weight += weight
 
                 # 构建前缀词典
                 for i in range(1, len(line)):
@@ -185,7 +224,7 @@ class JamenCutter:
         n = len(dag)
         total_log_weight = log(self._total_weight)
         route[n] = (0, 0, '', 0, '')  # 方便计算时不溢出
-        rt = {}
+        route_debug = {}
         for i in range(n - 1, -1, -1):
             # jieba的处理参考
             # route[idx] = max((log(self.FREQ.get(sentence[idx:x + 1]) or 1) -
@@ -199,8 +238,8 @@ class JamenCutter:
             route[i] = max((log(weight or 1) - total_log_weight + route[k + 1][0], k, clip[i:k + 1], weight, prop)
                            for k, weight, prop in dag[i])
 
-            rt[i] = [(log(weight or 1) - total_log_weight + route[k + 1][0], k, clip[i:k + 1],
-                      log(weight or 1) - total_log_weight, prop) for k, weight, prop in dag[i]]
+            route_debug[i] = [(log(weight or 1) - total_log_weight + route[k + 1][0], k, clip[i:k + 1],
+                               log(weight or 1) - total_log_weight, prop) for k, weight, prop in dag[i]]
 
         del (route[n])
         return route
@@ -242,7 +281,7 @@ class JamenCutter:
                             if m == n:
                                 max_weight = max(max_weight, suffix_weight)
 
-        return (max_weight if len(str) > 2 else 60) if max_weight > 0 else max_weight
+        return max_weight
 
     @staticmethod
     def _match_prefix_dict(str, prefix_dict, begin=0):
@@ -276,17 +315,15 @@ class JamenCutter:
                         names[name] = 0
                         names[sub_name] = sub_name_count + count
 
-        for name, count in sorted(names.items(), key=lambda x: x[1], reverse=True):
-            if count:
-                yield name, count
+        return filter(lambda x: x[1] > 0, sorted(names.items(), key=lambda x: x[1], reverse=True))
 
 
 if __name__ == '__main__':
     begin_time = time.perf_counter()
     cutter = JamenCutter()
     # book_path = 'res/test_book.txt'
-    # book_path = 'res/材料帝国1.txt'
-    book_path = 'res/材料帝国.txt'
+    book_path = 'res/材料帝国1.txt'
+    # book_path = 'res/材料帝国.txt'
     # book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
@@ -312,10 +349,10 @@ if __name__ == '__main__':
     # print("/".join(cutter.cut('徐扬笑道：“柴市长，您有没有听过老百姓是如何评价这些干部的？”')))
     # print("/".join(cutter.cut('发出呛哴哴的金属撞击声')))
     # print("/".join(cutter.cut('我这车正好能坐下四个人')))
-    print("/".join(cutter.cut('周工真的不想')))
+    # print("/".join(cutter.cut('周工真的不想')))
 
-    # for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
-    #     print((name, count))
+    for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
+        print((name, count))
 
     end_time = time.perf_counter()
     logging.info(f"time cost: {end_time - begin_time}")

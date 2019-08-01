@@ -34,7 +34,7 @@ class TagAnalyzer:
         self.__load_dict('dict\\chinese_regions.dict')
         self.__load_dict('dict\\world_countries.dict')
         self.__load_dict('dict\\chinese_colleges.dict')
-        self.__load_extra_stop_words('data\\chinese_stop_words.dict')
+        self.__load_extra_stop_words('dict\\chinese_stop_words.dict')
         self.__load_stop_words_regex('data\\not_included_regexps.txt')
         logging.info(f"stop words count: {len(self.__extra_stop_words)}")
 
@@ -133,7 +133,7 @@ class TagAnalyzer:
                         break
 
                 if word:
-                    self.__add_tag(word)
+                    # self.__add_tag(word)
                     if j > i:
                         self.__extract_not_included_words(clip[i:j])
                     step_i = j - i + len(word)

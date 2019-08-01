@@ -4,11 +4,17 @@ import re
 import sys
 import time
 
+import jamen_utils
 from baidu_speech import BaiduSpeech
 from double_linked_node import DoubleLinkedNode
-from tag_analyzer import TagAnalyzer
+from jamen_cutter import JamenCutter
 
-logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+logging.basicConfig(
+    stream=sys.stderr,
+    level=logging.DEBUG,
+    format='%(asctime)s.%(msecs)03d %(filename)s: %(levelname)s %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
 
 re_word_in_quote = re.compile("(“.*?”)")
 re_end_with_noword = re.compile(".*[^\u4E00-\u9FD5a-zA-Z0-9]$")
@@ -27,30 +33,34 @@ class SpeakerTalk:
     row_num = 0
     """说话内容所在的行号，从第1行开始"""
 
-    in_quote = False
+    is_in_quote = False
 
     def __init__(self, row_num, line):
         self.row_num = row_num
         self.speaker = ""
         self.line = line
-        self.in_quote = re_word_in_quote.match(line) is not None
+        self.is_in_quote = re_word_in_quote.match(line) is not None
         # logging.debug((speaker, talk))
 
     def __str__(self):
         speaker = self.speaker if self.speaker else None
-        return f"row[{self.row_num}]{speaker}: {self.line}"
+        return f"row[{self.row_num}] [{speaker}] {self.line}"
 
 
 class StoryTeller:
-    baidu_speech = BaiduSpeech()
-    tag_analyzer = TagAnalyzer()
+    MIN_HAN_WORD_LENGTH = 2
+    MAX_HAN_WORD_LENGTH = 6
 
+    baidu_speech = BaiduSpeech()
+    name_cutter = JamenCutter()
+
+    names = {}
     speaker_tones = {}
     default_tone = BaiduSpeech.Tone()
     speaker_talks = None
 
     def analyse(self, sentence):
-        self.tag_analyzer.analyse(sentence)
+        self.names = {k: v for k, v in self.name_cutter.extract_names(sentence)}
 
         # 将内容拆分为对白片段
         self.speaker_talks = self.split_to_double_linked(sentence)
@@ -61,8 +71,9 @@ class StoryTeller:
         # 完善发言人
         self.complete_speaker(self.speaker_talks)
 
-        # for speak in self.speaker_talks.datas():
-        #     logging.debug(speak)
+        for speak in self.speaker_talks.datas():
+            # logging.debug(speak)
+            print(speak)
 
     @staticmethod
     def split_to_double_linked(sentence):
@@ -109,9 +120,10 @@ class StoryTeller:
 
     def __get_most_possible_speaker(self, sentence):
         frags = {}
-        for frag in self.tag_analyzer.list_sub_words(sentence):
-            frag_count = self.tag_analyzer.get_tag_count(frag)
+        for frag in self.list_sub_words(sentence):
+            frag_count = self.names.get(frag, 0)
             if frag_count > 0:
+                return frag
                 frags[frag] = frag_count
         # for frag, count in sorted(frags.items(), key=lambda x: x[1], reverse=True):
 
@@ -121,6 +133,18 @@ class StoryTeller:
         # speaker = sorted(frags.items(), key=lambda x: x[1], reverse=True)[0][0]
         speaker = list(frags.keys())[0]
         return speaker
+
+    def list_sub_words(self, clip):
+        """
+        从一个断句中列举出所有词的组合
+        :param clip:
+        :return:
+        """
+        n = len(clip)
+        for begin in range(0, n - self.MIN_HAN_WORD_LENGTH + 1):
+            for end in range(begin + self.MIN_HAN_WORD_LENGTH,
+                             begin + min(n - begin, self.MAX_HAN_WORD_LENGTH) + 1):
+                yield clip[begin:end]
 
     @staticmethod
     def __get_most_possible_speaker_sentence(n):
@@ -163,26 +187,21 @@ class StoryTeller:
         self.default_tone = tone
 
     def play(self, book_path):
-        try:
-            with open(book_path, 'r', encoding='UTF-8') as file:
-                content = file.read()
-        except UnicodeDecodeError:
-            with open(book_path, 'r', encoding='gb18030', errors='ignore') as file:
-                content = file.read()
+        content = jamen_utils.load_text(book_path)
         self.analyse(content)
 
-        for speak_talk in teller.get_speaker_talks():
-            if speak_talk.speaker not in self.speaker_tones:
-                tone = self.default_tone.clone()
-                tone.alias = speak_talk.speaker
-                self.speaker_tones[speak_talk.speaker] = tone
-            self.baidu_speech.append_speech(speak_talk.line, self.speaker_tones[speak_talk.speaker])
-        self.baidu_speech.play()
+        # for speak_talk in teller.get_speaker_talks():
+        #     if speak_talk.speaker not in self.speaker_tones:
+        #         tone = self.default_tone.clone()
+        #         tone.alias = speak_talk.speaker
+        #         self.speaker_tones[speak_talk.speaker] = tone
+        #     self.baidu_speech.append_speech(speak_talk.line, self.speaker_tones[speak_talk.speaker])
+        # self.baidu_speech.play()
 
 
 if __name__ == '__main__':
     time_begin = time.perf_counter()
-    book = 'res/材料帝国.txt'
+    book = 'res/材料帝国1.txt'
     # book = 'res/test_book.txt'
     # book = 'res/材料帝国.txt'
     # book = 'D:\\OneDrive\\Books\\临高启明.txt'
