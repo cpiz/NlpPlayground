@@ -40,25 +40,25 @@ class JamenCutter:
 
     def __init__(self):
         self._load_dicts_with_cache([
-            'dict\\jieba_without_nr.dict',
-            'dict\\chinese.dict',
-            'dict\\chinese_regions.dict',
-            'dict\\world_countries.dict',
-            'dict\\chinese_colleges.dict',
-            'dict\\chinese_stop_words.dict',
+            'dict/jieba_without_nr.dict',
+            'dict/chinese.dict',
+            'dict/chinese_regions.dict',
+            'dict/world_countries.dict',
+            'dict/chinese_colleges.dict',
+            'dict/chinese_stop_words.dict',
         ], self._dict)
 
         for v in self._dict.values():
             self._total_weight += v[0]
         logging.info(f"dict words count: {len(self._dict)}")
 
-        self._load_dicts_with_cache(['dict\\japanese_names.dict'], self._japanese_names)
-        self._load_dicts_with_cache(['dict\\english_names.dict'], self._english_names)
-        self._load_dicts_with_cache(['dict\\chinese_family_names.dict'], self._chinese_family_names)
-        self._load_dicts_with_cache(['dict\\chinese_given_names.dict'], self._chinese_given_names)
-        self._load_dicts_with_cache(['dict\\chinese_name_prefixes.dict'], self._chinese_name_prefixes)
-        self._load_dicts_with_cache(['dict\\chinese_name_suffixes.dict'], self._chinese_name_suffixes)
-        self.__load_not_included_regex('data\\not_included_regexps.txt')
+        self._load_dicts_with_cache(['dict/japanese_names.dict'], self._japanese_names)
+        self._load_dicts_with_cache(['dict/english_names.dict'], self._english_names)
+        self._load_dicts_with_cache(['dict/chinese_family_names.dict'], self._chinese_family_names)
+        self._load_dicts_with_cache(['dict/chinese_given_names.dict'], self._chinese_given_names)
+        self._load_dicts_with_cache(['dict/chinese_name_prefixes.dict'], self._chinese_name_prefixes)
+        self._load_dicts_with_cache(['dict/chinese_name_suffixes.dict'], self._chinese_name_suffixes)
+        self.__load_not_included_regex('data/not_included_regexps.txt')
 
     def _load_dicts_with_cache(self, dict_path_list, dict, with_cache=True):
         cache_file_path = ''

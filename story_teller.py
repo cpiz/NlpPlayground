@@ -231,9 +231,9 @@ class StoryTeller:
 
 if __name__ == '__main__':
     time_begin = time.perf_counter()
-    # book = 'res\\材料帝国1.txt'
-    # book = 'res\\test_book.txt'
-    book = 'res\\材料帝国.txt'
+    # book = 'res/材料帝国1.txt'
+    # book = 'res/test_book.txt'
+    book = 'res/材料帝国.txt'
     # book = 'D:\\OneDrive\\Books\\临高启明.txt'
     # book = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
