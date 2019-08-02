@@ -211,8 +211,7 @@ class StoryTeller:
 
         last_row_num = -1
         for speak in self.speaker_talks.nodes():
-            row_num = '' if last_row_num == speak.row_num else speak.row_num
-            last_row_num = speak.row_num
+            row_num = '' if last_row_num == speak.row_num else speak.row_num; last_row_num = speak.row_num
 
             if speak.speaker:
                 # print(f"{'{0:<4}'.format(row_num)} [{'{0:{1}<3}'.format(speak.speaker, chr(12288))}] {speak.line}")

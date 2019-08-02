@@ -143,7 +143,7 @@ class JamenCutter:
                 for frag, prop in self._cut_chn(clip, bond=True):
                     yield frag, prop
             else:
-                yield clip, 'x'
+                yield clip, 'sym'
 
     def cut(self, sentence):
         for word, prop in self.cut_with_prop(sentence):
@@ -201,6 +201,7 @@ class JamenCutter:
                     ends.append((j - 1, chinese_name_weight, 'nr'))
                     continue
 
+                # 普通词
                 word_weight, word_prop = self._dict.get(frag, (-1, ''))
                 if j == i + 1 or word_weight > 0:  # 没有采用jieba的人名词性，错误很多
                     ends.append((j - 1, max(0, word_weight), word_prop))
@@ -308,6 +309,9 @@ class JamenCutter:
         names = {}
         for tag, prop in self.cut_with_prop(sentence):
             if prop == 'nr':
+                # names[tag] = names.get(tag, 0) + 1
+                pass
+            elif prop == 'x' and len(tag) >= 2:
                 names[tag] = names.get(tag, 0) + 1
 
         # 剔除一些跟高频名字粘结的低频名字，比如“秦海”与“秦海道”
@@ -338,7 +342,7 @@ if __name__ == '__main__':
     # book_path = 'res/test_book.txt'
     # book_path = 'res/材料帝国1.txt'
     # book_path = 'res/材料帝国.txt'
-    book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
+    book_path = 'D:/OneDrive/Books/临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
     # book_path = 'D:\\OneDrive\\Books\\重生之官路商途原稿加最好的蛇足续版.txt'
@@ -367,10 +371,10 @@ if __name__ == '__main__':
     # print("/".join(cutter.cut('胖子道')))
     # print("/".join(cutter.cut('年轻人们反驳道')))
 
-    # for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
-    #     print((name, count))
+    for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
+        print((name, count))
 
-    cutter.pre_extract_names(jamen_utils.load_text(book_path))
+    # cutter.pre_extract_names(jamen_utils.load_text(book_path))
 
     end_time = time.perf_counter()
     logging.info(f"time cost: {end_time - begin_time}")
