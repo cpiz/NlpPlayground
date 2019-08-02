@@ -10,7 +10,7 @@ import playsound
 import requests
 
 logging.basicConfig(
-    stream=sys.stdout,
+    stream=sys.stderr,
     level=logging.DEBUG,
     format='%(asctime)s.%(msecs)03d %(filename)s: %(levelname)s %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',

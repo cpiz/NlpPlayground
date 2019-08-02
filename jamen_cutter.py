@@ -23,6 +23,8 @@ class JamenCutter:
     _re_han = re.compile("[\u4E00-\u9FD5]+", re.U)
     MIN_HAN_WORD_LENGTH = 1
     MAX_HAN_WORD_LENGTH = 0xFFFFFFF
+    MIN_NAME_LENGTH = 2
+    MAX_NAME_LENGTH = 6
 
     _dict = {}  # 完整字典
     _total_weight = 0
@@ -194,6 +196,11 @@ class JamenCutter:
             for j in range(i + 1, n + 1):
                 frag = clip[i:j]
 
+                chinese_name_weight = self.match_chinese_name(frag)
+                if chinese_name_weight > 0:
+                    ends.append((j - 1, chinese_name_weight, 'nr'))
+                    continue
+
                 word_weight, word_prop = self._dict.get(frag, (-1, ''))
                 if j == i + 1 or word_weight > 0:  # 没有采用jieba的人名词性，错误很多
                     ends.append((j - 1, max(0, word_weight), word_prop))
@@ -207,11 +214,6 @@ class JamenCutter:
                 english_name_weight, prop = self._english_names.get(frag, (-1, ''))
                 if english_name_weight > 0:
                     ends.append((j - 1, english_name_weight, 'nr'))
-                    continue
-
-                chinese_name_weight = self._get_chinese_name(frag)
-                if chinese_name_weight > 0:
-                    ends.append((j - 1, chinese_name_weight, 'nr'))
                     continue
 
                 if word_weight < 0 and chinese_name_weight < 0 and japanese_name_weight:
@@ -244,7 +246,10 @@ class JamenCutter:
         del (route[n])
         return route
 
-    def _get_chinese_name(self, str):
+    def match_chinese_name(self, str):
+        if len(str) < 2:
+            return -1
+
         max_weight = -1
         n = len(str)
         for name_prefix, name_prefix_weight in self._match_prefix_dict(str, self._chinese_name_prefixes, 0):
@@ -317,14 +322,23 @@ class JamenCutter:
 
         return filter(lambda x: x[1] > 0, sorted(names.items(), key=lambda x: x[1], reverse=True))
 
+    def pre_extract_names(self, sentence):
+        _re_name = re.compile(
+            "[对向][着]?([^他她它你我]{2,3}?|[A-Za-z]+)(([发询反]?问道)|([回]?答道)|([说喊吼]?道))[^\u4E00-\u9FD5]",
+            re.U)
+        for line in [line.strip() for line in sentence.split('\n') if line]:
+            match_result = _re_name.search(line)
+            if match_result:
+                print(match_result.group(1) + "\t" + match_result.group(0))
+
 
 if __name__ == '__main__':
     begin_time = time.perf_counter()
     cutter = JamenCutter()
     # book_path = 'res/test_book.txt'
-    book_path = 'res/材料帝国1.txt'
+    # book_path = 'res/材料帝国1.txt'
     # book_path = 'res/材料帝国.txt'
-    # book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
+    book_path = 'D:\\OneDrive\\Books\\临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
     # book_path = 'D:\\OneDrive\\Books\\重生之官路商途原稿加最好的蛇足续版.txt'
@@ -350,9 +364,13 @@ if __name__ == '__main__':
     # print("/".join(cutter.cut('发出呛哴哴的金属撞击声')))
     # print("/".join(cutter.cut('我这车正好能坐下四个人')))
     # print("/".join(cutter.cut('周工真的不想')))
+    # print("/".join(cutter.cut('胖子道')))
+    # print("/".join(cutter.cut('年轻人们反驳道')))
 
-    for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
-        print((name, count))
+    # for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
+    #     print((name, count))
+
+    cutter.pre_extract_names(jamen_utils.load_text(book_path))
 
     end_time = time.perf_counter()
     logging.info(f"time cost: {end_time - begin_time}")

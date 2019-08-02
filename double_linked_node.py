@@ -1,10 +1,14 @@
-class DoubleLinkedNode:
+from abc import ABCMeta
+
+
+class DoubleLinkedListNode(metaclass=ABCMeta):
+    """
+    双链表结点
+    """
     prev = None
-    data = None
     next = None
 
-    def __init__(self, data, prev=None, next=None):
-        self.data = data
+    def __init__(self, prev=None, next=None):
         self.prev = prev
         self.next = next
 
@@ -16,11 +20,6 @@ class DoubleLinkedNode:
             node = node.next
             if not node:
                 break
-
-    def datas(self):
-        """返回从当前结点开始所有元素数据的迭代器"""
-        for node in self.nodes():
-            yield node.data
 
     def size(self):
         """
@@ -57,45 +56,47 @@ class DoubleLinkedNode:
             tail = tail.next
         return tail
 
-    def insert_before(self, data):
+    def insert_before(self, node):
         """
         在当前结点前方插入新结点，并返回新结点
-        :param data: 新结点数据
+        :param node: 新结点
         :return: 插入的新结点
         """
-        prev = self.prev
-        self.prev = DoubleLinkedNode(data, prev, self)
-        if prev:
-            prev.next = self.prev
+        node.prev = self.prev
+        node.next = self
+        self.prev = node
+        if node.prev:
+            node.prev.next = node
 
         return self.prev
 
-    def insert_before_head(self, data):
+    def insert_before_head(self, node):
         """
         在头结点前插入
         :return: 插入的新结点
         """
-        return self.head().insert_before(data)
+        return self.head().insert_before(node)
 
-    def insert_after(self, data):
+    def insert_after(self, node):
         """
         在当前结点之后插入新结点，并返回新结点
-        :param data: 新结点数据
+        :param node: 新结点
         :return: 插入的新结点
         """
-        next = self.next
-        self.next = DoubleLinkedNode(data, self, next)
-        if next:
-            next.prev = self.next
+        node.prev = self
+        node.next = self.next
+        self.next = node
+        if node.next:
+            node.next.prev = node
 
         return self.next
 
-    def insert_after_tail(self, data):
+    def insert_after_tail(self, node):
         """
         在当前结点后方插入
         :return: 插入的新结点
         """
-        return self.tail().insert_after(data)
+        return self.tail().insert_after(node)
 
     def delete(self):
         """
