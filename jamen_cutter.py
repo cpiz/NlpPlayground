@@ -125,7 +125,7 @@ class JamenCutter:
                 if len(reg_str) != 0:
                     reg_str += '|'
                 reg_str += exp
-        self._not_included_regex = re.compile(f"({reg_str})", re.U)
+        self._not_included_regex = re.compile(f"{reg_str}", re.U)
         # self.__stop_regex = re.compile(f"{reg_str}", re.U)
 
     def cut_with_prop(self, sentence):
@@ -196,15 +196,15 @@ class JamenCutter:
             for j in range(i + 1, n + 1):
                 frag = clip[i:j]
 
+                # 普通词
+                word_weight, word_prop = self._dict.get(frag, (-1, ''))
+                if j == i + 1 or word_weight > 0:
+                    ends.append((j - 1, max(0, word_weight), word_prop))
+                    continue
+
                 chinese_name_weight = self.match_chinese_name(frag)
                 if chinese_name_weight > 0:
                     ends.append((j - 1, chinese_name_weight, 'nr'))
-                    continue
-
-                # 普通词
-                word_weight, word_prop = self._dict.get(frag, (-1, ''))
-                if j == i + 1 or word_weight > 0:  # 没有采用jieba的人名词性，错误很多
-                    ends.append((j - 1, max(0, word_weight), word_prop))
                     continue
 
                 japanese_name_weight, prop = self._japanese_names.get(frag, (-1, ''))
@@ -217,7 +217,7 @@ class JamenCutter:
                     ends.append((j - 1, english_name_weight, 'nr'))
                     continue
 
-                if word_weight < 0 and chinese_name_weight < 0 and japanese_name_weight:
+                if word_weight < 0 and chinese_name_weight < 0 and japanese_name_weight < 0 and english_name_weight < 0:
                     break
         return dag
 
@@ -287,6 +287,9 @@ class JamenCutter:
                             if m == n:
                                 max_weight = max(max_weight, suffix_weight)
 
+        if max_weight > 0:
+            # 适当提高一点姓名的权重
+            max_weight = max(max_weight, 10)
         return max_weight
 
     @staticmethod
@@ -300,6 +303,21 @@ class JamenCutter:
                 break
         yield '', 1
 
+    @staticmethod
+    def list_sub_words(clip, min_length=2, max_length=7):
+        """
+        从一个断句中列举出所有词的组合
+        :param max_length: 最短词长
+        :param min_length: 最长词长
+        :param clip: 要切分的句子
+        :return: 所有子词组合的迭代器
+        """
+        n = len(clip)
+        for begin in range(0, n - min_length + 1):
+            for end in range(begin + min_length,
+                             begin + min(n - begin, max_length) + 1):
+                yield clip[begin:end]
+
     def extract_names(self, sentence):
         """
         提炼姓名
@@ -309,10 +327,10 @@ class JamenCutter:
         names = {}
         for tag, prop in self.cut_with_prop(sentence):
             if prop == 'nr':
-                # names[tag] = names.get(tag, 0) + 1
-                pass
-            elif prop == 'x' and len(tag) >= 2:
                 names[tag] = names.get(tag, 0) + 1
+                pass
+            # elif prop == 'x' and len(tag) >= 2:
+            #     names[tag] = names.get(tag, 0) + 1
 
         # 剔除一些跟高频名字粘结的低频名字，比如“秦海”与“秦海道”
         for name, count in sorted(names.items(), key=lambda x: len(x[0]), reverse=True):
@@ -326,14 +344,45 @@ class JamenCutter:
 
         return filter(lambda x: x[1] > 0, sorted(names.items(), key=lambda x: x[1], reverse=True))
 
-    def pre_extract_names(self, sentence):
-        _re_name = re.compile(
-            "[对向][着]?([^他她它你我]{2,3}?|[A-Za-z]+)(([发询反]?问道)|([回]?答道)|([说喊吼]?道))[^\u4E00-\u9FD5]",
-            re.U)
-        for line in [line.strip() for line in sentence.split('\n') if line]:
-            match_result = _re_name.search(line)
-            if match_result:
-                print(match_result.group(1) + "\t" + match_result.group(0))
+    def extract_names2(self, sentence):
+        reg1 = re.compile('([\u4e00-\u9fa5，]*)[问说道]：', re.U)
+        reg2 = re.compile('”([\u4e00-\u9fa5]+)', re.U)
+
+        words = {}
+        for line in [line.strip() for line in re.split('\n|，', sentence) if line]:
+            result1 = reg1.search(line)
+            if result1:
+                for word in self.list_sub_words(result1.group(1)):
+                    for w in self._not_included_regex.split(word):
+                        words[w] = words.get(w, 0) + 1
+            result2 = reg2.search(line)
+            if result2:
+                for word in self.list_sub_words(result2.group(1)):
+                    for w in self._not_included_regex.split(word):
+                        words[w] = words.get(w, 0) + 1
+
+        self._zip_dict(words)
+        for k, v in [(k, v) for k, v in sorted(words.items(), key=lambda x: x[1], reverse=True)
+                     if len(k) > 1 and v > 1]:
+            yield k, v
+
+    def _zip_dict(self, dict):
+        for key, count in [(k, c) for k, c in sorted(dict.items(), key=lambda x: len(x[0]), reverse=True)
+                           if len(k) > 2]:
+            for sub_key in self.list_sub_words(key, 2, len(key) - 1):
+                sub_key_count = dict.get(sub_key, 0)
+                if count == sub_key_count and sub_key_count > 0:
+                    dict[sub_key] = 0
+
+
+def pre_extract_names(self, sentence):
+    _re_name = re.compile(
+        "[对向][着]?([^他她它你我]{2,3}?|[A-Za-z]+)(([发询反]?问道)|([回]?答道)|([说喊吼]?道))[^\u4E00-\u9FD5]",
+        re.U)
+    for line in [line.strip() for line in sentence.split('\n') if line]:
+        match_result = _re_name.search(line)
+        if match_result:
+            print(match_result.group(1) + "\t" + match_result.group(0))
 
 
 if __name__ == '__main__':
@@ -341,8 +390,8 @@ if __name__ == '__main__':
     cutter = JamenCutter()
     # book_path = 'res/test_book.txt'
     # book_path = 'res/材料帝国1.txt'
-    # book_path = 'res/材料帝国.txt'
-    book_path = 'D:/OneDrive/Books/临高启明.txt'
+    book_path = 'res/材料帝国.txt'
+    # book_path = 'D:/OneDrive/Books/临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
     # book_path = 'D:\\OneDrive\\Books\\重生之官路商途原稿加最好的蛇足续版.txt'
@@ -370,6 +419,8 @@ if __name__ == '__main__':
     # print("/".join(cutter.cut('周工真的不想')))
     # print("/".join(cutter.cut('胖子道')))
     # print("/".join(cutter.cut('年轻人们反驳道')))
+    # print("/".join(cutter.cut('当大家的理想一致的时候')))
+    # print("/".join([k + v for (k, v) in cutter.cut_with_prop('老刘，你们就照小秦和冷科长的安排去做')]))
 
     for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
         print((name, count))
