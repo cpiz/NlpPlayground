@@ -40,8 +40,8 @@ if __name__ == '__main__':
 
     count = 0
     for k, v in [(k, v) for k, v in jieba_dict.items()]:
-        if v[1] == 'nr':
-            if k in chn_dict:
+        if v[1] in ('nr', 'nrt'):
+            if len(k) == 1 or k in chn_dict:
                 jieba_dict[k] = v[0], 'n'
             else:
                 del jieba_dict[k]

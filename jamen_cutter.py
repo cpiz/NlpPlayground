@@ -140,7 +140,7 @@ class JamenCutter:
                 continue
 
             if self._re_han.match(clip):
-                for frag, prop in self._cut_chn(clip, bond=True):
+                for frag, prop in self._cut_chn(clip, bond=False):
                     yield frag, prop
             else:
                 yield clip, 'sym'
@@ -150,6 +150,10 @@ class JamenCutter:
             yield word
 
     def _cut_chn(self, clip, bond=False):
+        for word, prop in self._cut_chn_without_name(clip, bond):
+            yield word, prop
+
+    def _cut_chn_without_name(self, clip, bond=False):
         """
         将中文句子切分成词
         :param clip: 句子
@@ -202,23 +206,26 @@ class JamenCutter:
                     ends.append((j - 1, max(0, word_weight), word_prop))
                     continue
 
-                chinese_name_weight = self.match_chinese_name(frag)
-                if chinese_name_weight > 0:
-                    ends.append((j - 1, chinese_name_weight, 'nr'))
-                    continue
-
-                japanese_name_weight, prop = self._japanese_names.get(frag, (-1, ''))
-                if japanese_name_weight > 0:
-                    ends.append((j - 1, japanese_name_weight, 'nr'))
-                    continue
-
-                english_name_weight, prop = self._english_names.get(frag, (-1, ''))
-                if english_name_weight > 0:
-                    ends.append((j - 1, english_name_weight, 'nr'))
-                    continue
-
-                if word_weight < 0 and chinese_name_weight < 0 and japanese_name_weight < 0 and english_name_weight < 0:
+                if word_weight < 0:
                     break
+
+                # chinese_name_weight = self.match_chinese_name(frag)
+                # if chinese_name_weight > 0:
+                #     ends.append((j - 1, chinese_name_weight, 'nr'))
+                #     continue
+                #
+                # japanese_name_weight, prop = self._japanese_names.get(frag, (-1, ''))
+                # if japanese_name_weight > 0:
+                #     ends.append((j - 1, japanese_name_weight, 'nr'))
+                #     continue
+                #
+                # english_name_weight, prop = self._english_names.get(frag, (-1, ''))
+                # if english_name_weight > 0:
+                #     ends.append((j - 1, english_name_weight, 'nr'))
+                #     continue
+                #
+                # if word_weight < 0 and chinese_name_weight < 0 and japanese_name_weight < 0 and english_name_weight < 0:
+                #     break
         return dag
 
     # noinspection PyMethodMayBeStatic
@@ -344,28 +351,6 @@ class JamenCutter:
 
         return filter(lambda x: x[1] > 0, sorted(names.items(), key=lambda x: x[1], reverse=True))
 
-    def extract_names2(self, sentence):
-        reg1 = re.compile('([\u4e00-\u9fa5，]*)[问说道]：', re.U)
-        reg2 = re.compile('”([\u4e00-\u9fa5]+)', re.U)
-
-        words = {}
-        for line in [line.strip() for line in re.split('\n|，', sentence) if line]:
-            result1 = reg1.search(line)
-            if result1:
-                for word in self.list_sub_words(result1.group(1)):
-                    for w in self._not_included_regex.split(word):
-                        words[w] = words.get(w, 0) + 1
-            result2 = reg2.search(line)
-            if result2:
-                for word in self.list_sub_words(result2.group(1)):
-                    for w in self._not_included_regex.split(word):
-                        words[w] = words.get(w, 0) + 1
-
-        self._zip_dict(words)
-        for k, v in [(k, v) for k, v in sorted(words.items(), key=lambda x: x[1], reverse=True)
-                     if len(k) > 1 and v > 1]:
-            yield k, v
-
     def _zip_dict(self, dict):
         for key, count in [(k, c) for k, c in sorted(dict.items(), key=lambda x: len(x[0]), reverse=True)
                            if len(k) > 2]:
@@ -374,15 +359,14 @@ class JamenCutter:
                 if count == sub_key_count and sub_key_count > 0:
                     dict[sub_key] = 0
 
-
-def pre_extract_names(self, sentence):
-    _re_name = re.compile(
-        "[对向][着]?([^他她它你我]{2,3}?|[A-Za-z]+)(([发询反]?问道)|([回]?答道)|([说喊吼]?道))[^\u4E00-\u9FD5]",
-        re.U)
-    for line in [line.strip() for line in sentence.split('\n') if line]:
-        match_result = _re_name.search(line)
-        if match_result:
-            print(match_result.group(1) + "\t" + match_result.group(0))
+    def pre_extract_names(self, sentence):
+        _re_name = re.compile(
+            "[对向][着]?([^他她它你我]{2,3}?|[A-Za-z]+)(([发询反]?问道)|([回]?答道)|([说喊吼]?道))[^\u4E00-\u9FD5]",
+            re.U)
+        for line in [line.strip() for line in sentence.split('\n') if line]:
+            match_result = _re_name.search(line)
+            if match_result:
+                print(match_result.group(1) + "\t" + match_result.group(0))
 
 
 if __name__ == '__main__':
@@ -390,7 +374,7 @@ if __name__ == '__main__':
     cutter = JamenCutter()
     # book_path = 'res/test_book.txt'
     # book_path = 'res/材料帝国1.txt'
-    book_path = 'res/材料帝国.txt'
+    book_path = 'res/材料帝国1.txt'
     # book_path = 'D:/OneDrive/Books/临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
@@ -422,8 +406,9 @@ if __name__ == '__main__':
     # print("/".join(cutter.cut('当大家的理想一致的时候')))
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop('老刘，你们就照小秦和冷科长的安排去做')]))
 
-    for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
-        print((name, count))
+    print("/".join([k + v for (k, v) in cutter.cut_with_prop(jamen_utils.load_text(book_path))]))
+    # for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
+    #     print((name, count))
 
     # cutter.pre_extract_names(jamen_utils.load_text(book_path))
 
