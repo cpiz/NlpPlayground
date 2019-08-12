@@ -26,8 +26,8 @@ class JamenCutter:
     MIN_NAME_LENGTH = 2
     MAX_NAME_LENGTH = 6
 
-    _dict = {}  # 完整字典
-    _total_weight = 0
+    _chinese_words = {}  # 完整字典
+    __chinese_words_total_weight = 0
     _chinese_family_names = {}
     _chinese_given_names = {}
     _chinese_name_prefixes = {}
@@ -46,11 +46,11 @@ class JamenCutter:
             'dict/world_countries.dict',
             'dict/chinese_colleges.dict',
             'dict/chinese_stop_words.dict',
-        ], self._dict)
+        ], self._chinese_words)
 
-        for v in self._dict.values():
-            self._total_weight += v[0]
-        logging.info(f"dict words count: {len(self._dict)}")
+        for v in self._chinese_words.values():
+            self.__chinese_words_total_weight += v[0]
+        logging.info(f"dict words count: {len(self._chinese_words)}")
 
         self._load_dicts_with_cache(['dict/japanese_names.dict'], self._japanese_names)
         self._load_dicts_with_cache(['dict/english_names.dict'], self._english_names)
@@ -101,8 +101,8 @@ class JamenCutter:
                     # 忽略注释
                     continue
 
-                word, weight, prop = (line + '  ').split(' ')[:3]
-                weight = int(weight) if weight else 1
+                word, weight, prop = (line + ' 1 x').split(' ')[:3]
+                weight = int(float(weight))
                 if word not in dict:
                     dict[word] = weight, prop
 
@@ -125,8 +125,12 @@ class JamenCutter:
                 if len(reg_str) != 0:
                     reg_str += '|'
                 reg_str += exp
-        self._not_included_regex = re.compile(f"{reg_str}", re.U)
+        self._not_included_regex = re.compile(f"({reg_str})", re.U)
         # self.__stop_regex = re.compile(f"{reg_str}", re.U)
+
+    def cut(self, sentence):
+        for word, prop in self.cut_with_prop(sentence):
+            yield word
 
     def cut_with_prop(self, sentence):
         clips = self._re_block.split(sentence)  # 切分成不包含标点的片段
@@ -140,18 +144,52 @@ class JamenCutter:
                 continue
 
             if self._re_han.match(clip):
-                for frag, prop in self._cut_chn(clip, bond=False):
+                for frag, prop in self._cut_chn_without_name(clip, bond=False):
                     yield frag, prop
             else:
                 yield clip, 'sym'
 
-    def cut(self, sentence):
-        for word, prop in self.cut_with_prop(sentence):
-            yield word
-
     def _cut_chn(self, clip, bond=False):
-        for word, prop in self._cut_chn_without_name(clip, bond):
-            yield word, prop
+        word_list = [(word, prop) for word, prop in self._cut_chn_without_name(clip, bond)]
+        dag = {}
+        n = len(word_list)
+        for i in range(0, n):
+            dag[i] = []
+            for j in range(i + 1, n + 1):
+                combo_word = "".join([w for w, p in word_list[i:j]])
+                weight = self.match_chinese_name(combo_word)
+                if j == i + 1 or weight > 0:
+                    prop = 'ns' if weight > 0 else word_list[i][1]
+                    dag[i].append((j - 1, max(weight, len(combo_word)), combo_word, prop))
+                elif weight < 0:
+                    break
+
+        route = {n: (0, 0, '', '')}
+        for i in range(n - 1, -1, -1):
+            route[i] = max((weight + route[k + 1][0], k, word, prop) for k, weight, word, prop in dag[i])
+        del route[n]
+
+        i = 0
+        while i < n:
+            yield route[i][2], route[i][3]
+            j = route[i][1] + 1
+            i = j
+
+        # buf = []
+        # for word, prop in ddd:
+        #     buf.append((word, prop))
+        #     if len(buf) == 1 and prop != 'x':
+        #         continue
+        #
+        #     tmp = "".join([w for w, p in buf])
+        #     result = self.match_chinese_name(tmp)
+        #     if result > 0 and len(tmp) > 1:
+        #         buf = [(tmp, 'nr')]
+        #     elif result < 0:
+        #         yield buf.pop(0)
+        #
+        # for w, p in buf:
+        #     yield w, p
 
     def _cut_chn_without_name(self, clip, bond=False):
         """
@@ -201,38 +239,35 @@ class JamenCutter:
                 frag = clip[i:j]
 
                 # 普通词
-                word_weight, word_prop = self._dict.get(frag, (-1, ''))
+                word_weight, word_prop = self._chinese_words.get(frag, (-1, ''))
                 if j == i + 1 or word_weight > 0:
                     ends.append((j - 1, max(0, word_weight), word_prop))
                     continue
 
-                if word_weight < 0:
-                    break
+                chinese_name_weight = self.match_chinese_name(frag)
+                if chinese_name_weight > 0:
+                    ends.append((j - 1, chinese_name_weight, 'nr'))
+                    continue
 
-                # chinese_name_weight = self.match_chinese_name(frag)
-                # if chinese_name_weight > 0:
-                #     ends.append((j - 1, chinese_name_weight, 'nr'))
-                #     continue
-                #
-                # japanese_name_weight, prop = self._japanese_names.get(frag, (-1, ''))
-                # if japanese_name_weight > 0:
-                #     ends.append((j - 1, japanese_name_weight, 'nr'))
-                #     continue
-                #
-                # english_name_weight, prop = self._english_names.get(frag, (-1, ''))
-                # if english_name_weight > 0:
-                #     ends.append((j - 1, english_name_weight, 'nr'))
-                #     continue
-                #
-                # if word_weight < 0 and chinese_name_weight < 0 and japanese_name_weight < 0 and english_name_weight < 0:
-                #     break
+                japanese_name_weight, prop = self._japanese_names.get(frag, (-1, ''))
+                if japanese_name_weight > 0:
+                    ends.append((j - 1, japanese_name_weight, 'nr'))
+                    continue
+
+                english_name_weight, prop = self._english_names.get(frag, (-1, ''))
+                if english_name_weight > 0:
+                    ends.append((j - 1, english_name_weight, 'nr'))
+                    continue
+
+                if word_weight < 0 and chinese_name_weight < 0 and japanese_name_weight < 0 and english_name_weight < 0:
+                    break
         return dag
 
     # noinspection PyMethodMayBeStatic
     def _calc_route(self, clip, dag):
         route = {}
         n = len(dag)
-        total_log_weight = log(self._total_weight)
+        total_log_weight = log(self.__chinese_words_total_weight)
         route[n] = (0, 0, '', 0, '')  # 方便计算时不溢出
         route_debug = {}
         for i in range(n - 1, -1, -1):
@@ -255,9 +290,6 @@ class JamenCutter:
         return route
 
     def match_chinese_name(self, str):
-        if len(str) < 2:
-            return -1
-
         max_weight = -1
         n = len(str)
         for name_prefix, name_prefix_weight in self._match_prefix_dict(str, self._chinese_name_prefixes, 0):
@@ -266,7 +298,7 @@ class JamenCutter:
             for family_name, family_name_weight in self._match_prefix_dict(str, self._chinese_family_names, i):
                 j = i + len(family_name)
                 if j == n:
-                    max_weight = max(max_weight, family_name_weight)
+                    max_weight = max(max_weight, name_prefix_weight + family_name_weight)
                     continue
                 elif family_name_weight == 0:
                     continue
@@ -279,7 +311,7 @@ class JamenCutter:
 
                     k = j + len(given_name)
                     if k == n:
-                        max_weight = max(max_weight, given_name_weight)
+                        max_weight = max(max_weight, name_prefix_weight + family_name_weight + given_name_weight)
                         continue
                     elif given_name_weight == 0:
                         continue
@@ -292,11 +324,14 @@ class JamenCutter:
                         for name_suffix, suffix_weight in self._match_prefix_dict(str, self._chinese_name_suffixes, k):
                             m = k + len(name_suffix)
                             if m == n:
-                                max_weight = max(max_weight, suffix_weight)
+                                max_weight = max(max_weight, name_prefix_weight +
+                                                 family_name_weight + given_name_weight + suffix_weight)
 
         if max_weight > 0:
-            # 适当提高一点姓名的权重
+            # 适当提高一点姓名的最低权重
             max_weight = max(max_weight, 10)
+        if len(str) == 1:
+            max_weight = min(max_weight, 1)
         return max_weight
 
     @staticmethod
@@ -405,10 +440,12 @@ if __name__ == '__main__':
     # print("/".join(cutter.cut('年轻人们反驳道')))
     # print("/".join(cutter.cut('当大家的理想一致的时候')))
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop('老刘，你们就照小秦和冷科长的安排去做')]))
+    # print("/".join([k + v for (k, v) in cutter.cut_with_prop('苗磊急于向父亲和项纪勇推荐秦海')]))
+    # print("/".join([k + v for (k, v) in cutter.cut_with_prop('韦宝林和宁中英又扯了几句闲话')]))
 
-    print("/".join([k + v for (k, v) in cutter.cut_with_prop(jamen_utils.load_text(book_path))]))
-    # for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
-    #     print((name, count))
+    # print("/".join([k + v for (k, v) in cutter.cut_with_prop(jamen_utils.load_text(book_path))]))
+    for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
+        print((name, count))
 
     # cutter.pre_extract_names(jamen_utils.load_text(book_path))
 
