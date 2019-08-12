@@ -144,54 +144,12 @@ class JamenCutter:
                 continue
 
             if self._re_han.match(clip):
-                for frag, prop in self._cut_chn_without_name(clip, bond=False):
+                for frag, prop in self._cut_chn(clip, bond=False):
                     yield frag, prop
             else:
                 yield clip, 'sym'
 
     def _cut_chn(self, clip, bond=False):
-        word_list = [(word, prop) for word, prop in self._cut_chn_without_name(clip, bond)]
-        dag = {}
-        n = len(word_list)
-        for i in range(0, n):
-            dag[i] = []
-            for j in range(i + 1, n + 1):
-                combo_word = "".join([w for w, p in word_list[i:j]])
-                weight = self.match_chinese_name(combo_word)
-                if j == i + 1 or weight > 0:
-                    prop = 'ns' if weight > 0 else word_list[i][1]
-                    dag[i].append((j - 1, max(weight, len(combo_word)), combo_word, prop))
-                elif weight < 0:
-                    break
-
-        route = {n: (0, 0, '', '')}
-        for i in range(n - 1, -1, -1):
-            route[i] = max((weight + route[k + 1][0], k, word, prop) for k, weight, word, prop in dag[i])
-        del route[n]
-
-        i = 0
-        while i < n:
-            yield route[i][2], route[i][3]
-            j = route[i][1] + 1
-            i = j
-
-        # buf = []
-        # for word, prop in ddd:
-        #     buf.append((word, prop))
-        #     if len(buf) == 1 and prop != 'x':
-        #         continue
-        #
-        #     tmp = "".join([w for w, p in buf])
-        #     result = self.match_chinese_name(tmp)
-        #     if result > 0 and len(tmp) > 1:
-        #         buf = [(tmp, 'nr')]
-        #     elif result < 0:
-        #         yield buf.pop(0)
-        #
-        # for w, p in buf:
-        #     yield w, p
-
-    def _cut_chn_without_name(self, clip, bond=False):
         """
         将中文句子切分成词
         :param clip: 句子
