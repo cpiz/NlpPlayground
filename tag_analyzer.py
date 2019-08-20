@@ -10,8 +10,9 @@ logging.basicConfig(
     stream=sys.stderr,
     level=logging.DEBUG,
     format='%(asctime)s.%(msecs)03d %(filename)s: %(levelname)s %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
+logger = logging.getLogger(__name__)
 
 
 class TagAnalyzer:
@@ -36,10 +37,10 @@ class TagAnalyzer:
         self.__load_dict('dict\\chinese_colleges.dict')
         self.__load_extra_stop_words('dict\\chinese_stop_words.dict')
         self.__load_stop_words_regex('data\\not_included_regexps.txt')
-        logging.info(f"stop words count: {len(self.__extra_stop_words)}")
+        logger.info(f"stop words count: {len(self.__extra_stop_words)}")
 
     def __load_dict(self, dict_path):
-        logging.debug(f"load dict['{dict_path}']...")
+        logger.debug(f"load dict['{dict_path}']...")
         with open(dict_path, 'r', encoding='UTF-8') as f:
             for word in [l.strip() for l in f if l.strip()]:
                 if word[:1] == '#':
@@ -56,7 +57,7 @@ class TagAnalyzer:
                     frag = word[:i]
                     if frag not in self.__dict.keys():
                         self.__dict[frag] = 0  # 不完整的词权重为0
-        logging.debug(f"load dict['{dict_path}'] done, size: {len(self.__dict)} ")
+        logger.debug(f"load dict['{dict_path}'] done, size: {len(self.__dict)} ")
 
     def __load_extra_stop_words(self, dict_path):
         """加载精确停止词字典"""
@@ -81,18 +82,18 @@ class TagAnalyzer:
         self.__stop_regex = re.compile(f"{reg_str}", re.U)
 
     def analyse(self, sentence):
-        logging.info("build tags...")
+        logger.info("build tags...")
         self.__build_tags(sentence)
-        logging.info("build tags done")
+        logger.info("build tags done")
 
-        logging.debug(f"tags count before extract: {len(self.__tags)}")
+        logger.debug(f"tags count before extract: {len(self.__tags)}")
         self.__remove_low_freq_tags()
         self.__remove_stop_word_tags()
         self.__remove_stop_regexps()
         self.__remove_redundant_tags()
         self.__remove_redundant_tags()
         self.__remove_low_freq_tags()
-        logging.debug(f"tags count after extract: {len(self.__tags)}")
+        logger.debug(f"tags count after extract: {len(self.__tags)}")
 
     def __build_tags(self, sentence):
         clips = self.__re_block.split(sentence)  # 切分成不包含标点的片段
@@ -164,40 +165,40 @@ class TagAnalyzer:
         移除低频词
         :return:
         """
-        logging.debug("remove low freq tags...")
+        logger.debug("remove low freq tags...")
         for tag, count in {k: v for k, v in self.__tags.items()}.items():
             if count <= 1:
                 self.__remove_tag(tag)
-        logging.debug(f"remove low freq tags done, tags: {len(self.__tags)}")
+        logger.debug(f"remove low freq tags done, tags: {len(self.__tags)}")
 
     def __remove_stop_word_tags(self):
         """
         移除停用词
         :return:
         """
-        logging.debug("remove stop word tags...")
+        logger.debug("remove stop word tags...")
         for tag in [key for key in self.__tags.keys()]:
             if tag in self.__extra_stop_words:
                 self.__remove_tag(tag)
-        logging.debug(f"remove stop word tags done, tags: {len(self.__tags)}")
+        logger.debug(f"remove stop word tags done, tags: {len(self.__tags)}")
 
     def __remove_stop_regexps(self):
         """
         移除停用词
         :return:
         """
-        logging.debug("remove stop regexps tags...")
+        logger.debug("remove stop regexps tags...")
         for tag in [key for key in self.__tags.keys()]:
             if self.__stop_regex.search(tag):
                 self.__remove_tag(tag)
-        logging.debug(f"remove stop regexps done, tags: {len(self.__tags)}")
+        logger.debug(f"remove stop regexps done, tags: {len(self.__tags)}")
 
     def __remove_redundant_tags(self):
         """
         去除被包含的冗余词
         :return:
         """
-        logging.debug("remove redundant tags...")
+        logger.debug("remove redundant tags...")
         # 去除黏连字
         # 分离：如“秦海”出现100，“秦海道”出现20次，则长的词语便是无效的，频率差一定系数以下可分离，并将长词次数累加到短词上
         tag_counts = sorted(self.__tags.items(), key=lambda x: x[1] * 1000 - len(x[0]), reverse=True)
@@ -206,10 +207,10 @@ class TagAnalyzer:
                 sub_tag_count = self.__tags.get(sub_tag, 0)
                 if tag_count < sub_tag_count * 0.1:
                     # 被粘上的杂词
-                    # logging.debug(f"remove longer tag: {tag} into {sub_tag}")
+                    # logger.debug(f"remove longer tag: {tag} into {sub_tag}")
                     self.__remove_tag(tag)
                     self.__set_tag(sub_tag, sub_tag_count + tag_count)
-        logging.debug(f"remove redundant tags done, tags: {len(self.__tags)}")
+        logger.debug(f"remove redundant tags done, tags: {len(self.__tags)}")
 
     def list_sub_words(self, clip):
         """
@@ -259,7 +260,7 @@ if __name__ == '__main__':
     content = jamen_utils.load_text(book_path)
     cutter.analyse(content)
     end_time = time.perf_counter()
-    logging.info(f"time cost: {end_time - begin_time}")
+    logger.info(f"time cost: {end_time - begin_time}")
 
     for k, v in sorted(cutter.tags().items(), key=lambda x: x[1], reverse=True)[:10000]:
         print(k, v)

@@ -13,8 +13,9 @@ logging.basicConfig(
     stream=sys.stderr,
     level=logging.DEBUG,
     format='%(asctime)s.%(msecs)03d %(filename)s: %(levelname)s %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
+logger = logging.getLogger(__name__)
 
 
 class JamenCutter:
@@ -50,7 +51,7 @@ class JamenCutter:
 
         for v in self._chinese_words.values():
             self._chinese_words_total_weight += v[0]
-        logging.info(f"dict words count: {len(self._chinese_words)}")
+        logger.info(f"dict words count: {len(self._chinese_words)}")
 
         self._load_dicts_with_cache(['dict/japanese_names.dict'], self._japanese_names)
         self._load_dicts_with_cache(['dict/english_names.dict'], self._english_names)
@@ -83,7 +84,7 @@ class JamenCutter:
         if with_cache and not need_update:
             with open(cache_file_path, 'rb') as file:
                 dict.update(marshal.load(file))
-                logging.debug(f"load dict from cache '{cache_file_path}'")
+                logger.debug(f"load dict from cache '{cache_file_path}'")
         else:
             for dict_path in dict_path_list:
                 self._load_dict(dict_path, dict)
@@ -91,10 +92,10 @@ class JamenCutter:
         if with_cache and need_update:
             with open(cache_file_path, 'wb') as file:
                 marshal.dump(dict, file)
-                logging.debug(f"dump dict into cache '{cache_file_path}'")
+                logger.debug(f"dump dict into cache '{cache_file_path}'")
 
     def _load_dict(self, dict_path, dict):
-        logging.debug(f"load dict['{dict_path}']...")
+        logger.debug(f"load dict['{dict_path}']...")
         with open(dict_path, 'r', encoding='UTF-8') as f:
             for line in [l.strip() for l in f if l.strip()]:
                 if line[:1] == '#':
@@ -105,7 +106,7 @@ class JamenCutter:
                 weight = int(float(weight))
                 self._add_word(dict, word, weight, prop)
 
-        logging.debug(f"load dict['{dict_path}'] done, size: {len(dict)} ")
+        logger.debug(f"load dict['{dict_path}'] done, size: {len(dict)} ")
 
     def __load_not_included_regex(self, dict_path):
         """加载模糊停止词正则式"""
@@ -417,4 +418,4 @@ if __name__ == '__main__':
     # cutter.pre_extract_names(jamen_utils.load_text(book_path))
 
     end_time = time.perf_counter()
-    logging.info(f"time cost: {end_time - begin_time}")
+    logger.info(f"time cost: {end_time - begin_time}")

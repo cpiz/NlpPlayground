@@ -14,8 +14,9 @@ logging.basicConfig(
     stream=sys.stderr,
     level=logging.DEBUG,
     format='%(asctime)s.%(msecs)03d %(filename)s: %(levelname)s %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
+logger = logging.getLogger(__name__)
 
 APP_ID = 16634868
 
@@ -144,15 +145,15 @@ class BaiduSpeech:
         content_type = r.headers["Content-Type"]
         if content_type == "application/json":
             json_result = r.json()
-            logging.error(f"request text2audio error, err_no: {json_result['err_no']}, "
-                          f"err_msg: {json_result['err_msg']}")
+            logger.error(f"request text2audio error, err_no: {json_result['err_no']}, "
+                         f"err_msg: {json_result['err_msg']}")
         elif content_type == "audio/mp3":
             audio_file_path = f"mp3/{self.__current_milli_time()}.mp3"
             with open(audio_file_path, 'wb') as file:
                 file.write(r.content)
             return audio_file_path
         else:
-            logging.error(f"request text2audio error, unexpected content-type")
+            logger.error(f"request text2audio error, unexpected content-type")
             return ""
 
     def __request_auth(self):
@@ -179,7 +180,7 @@ class BaiduSpeech:
             idle = True
             if self.__play_list:
                 text, tone, audio = self.__play_list.pop(0)
-                logging.debug(f"play {audio}[{tone.alias}]{text}")
+                logger.debug(f"play {audio}[{tone.alias}]{text}")
                 self.__play_audio(audio)
                 # if os.path.exists(audio):
                 #     os.remove(audio)
@@ -206,7 +207,7 @@ class BaiduSpeech:
         try:
             playsound.playsound(path, True)
         except UnicodeDecodeError as err:
-            logging.warning(f'play error, error: {err}"')
+            logger.warning(f'play error, error: {err}"')
 
 
 if __name__ == '__main__':

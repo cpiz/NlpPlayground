@@ -15,9 +15,10 @@ logging.basicConfig(
     stream=sys.stderr,
     level=logging.DEBUG,
     format='%(asctime)s.%(msecs)03d %(filename)s: %(levelname)s %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
-logging.getLogger("connectionpool").setLevel(logging.NOTSET)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 re_word_in_quote = re.compile("(“.*?”)")
 re_end_with_noword = re.compile(".*[^\u4E00-\u9FD5a-zA-Z0-9]$")
@@ -44,7 +45,6 @@ class SpeakerTalk(DoubleLinkedListNode):
         self.speaker = ""
         self.line = line
         self.is_in_quote = re_word_in_quote.match(line) is not None
-        # logging.debug((speaker, talk))
 
     def __str__(self):
         speaker = self.speaker if self.speaker else ''
@@ -73,27 +73,27 @@ class StoryTeller:
     default_male_tone = BaiduSpeech.Tone(pit=1)
     default_female_tone = BaiduSpeech.Tone(pit=0)
     voiceover_tone = BaiduSpeech.Tone(pit=3)
-    speaker_talks = None
+    dialogues = None
 
     def analyse(self, sentence):
         self.names = {k: v for k, v in self.name_cutter.extract_names(sentence)}
 
         # 将内容拆分为对白片段
-        self.speaker_talks = self.split_to_double_linked(sentence)
+        self.dialogues = self.split_to_double_linked(sentence)
 
         # 合并同一行内的画外音
-        self.combine_over_voice(self.speaker_talks)
+        self.combine_over_voice(self.dialogues)
 
         # 完善发言人
-        self.complete_speaker(self.speaker_talks)
+        self.complete_speaker(self.dialogues)
 
         line_count = 0
         speaker_count = 0
-        for speak in self.speaker_talks.nodes():
+        for dialogue in self.dialogues.nodes():
             line_count += 1
-            speaker_count += int(bool(speak.speaker))
-        logging.info(f"analyse done, line_count: {line_count}, speaker_count: {speaker_count}, rate = "
-                     f"{speaker_count / line_count}")
+            speaker_count += int(bool(dialogue.speaker))
+        logger.info(f"analyse done, line_count: {line_count}, speaker_count: {speaker_count}, rate = "
+                    f"{speaker_count / line_count}")
 
     def add_word(self, word, weight=1, prop='x'):
         self.name_cutter.add_word(word, weight, prop)
@@ -122,8 +122,8 @@ class StoryTeller:
 
         return head
 
-    def get_speaker_talks(self):
-        return self.speaker_talks.nodes() if self.speaker_talks else None
+    def get_dialogues(self):
+        return self.dialogues.nodes() if self.dialogues else None
 
     def complete_speaker(self, node):
         """
@@ -236,33 +236,26 @@ class StoryTeller:
     def set_voiceover_tone(self, tone):
         self.voiceover_tone = tone
 
-    def play(self, book_path):
-        content = jamen_utils.load_text(book_path)
-        self.analyse(content)
-
-        last_row_num = -1
-        for speak in self.get_speaker_talks():
-            row_num = '' if last_row_num == speak.row_num else speak.row_num
-            last_row_num = speak.row_num
-
-            if speak.speaker:
-                print(f"{'{0:<5}'.format(row_num)} [{'{0:{1}<3}'.format(speak.speaker, chr(12288))}] {speak.line}")
-                pass
-            else:
-                print(f"{'{0:<5}'.format(row_num)} [{'{0:{1}<3}'.format('', chr(12288))}] {speak.line}")
-
-        for speak_talk in self.get_speaker_talks():
-            if speak_talk.speaker not in self.speaker_tones:
-                if speak_talk.speaker:
-                    gender = ngender.guess(speak_talk.speaker)[0]
+    def play(self):
+        for dialogue in self.get_dialogues():
+            if dialogue.speaker not in self.speaker_tones:
+                if dialogue.speaker:
+                    gender = ngender.guess(dialogue.speaker)[0]
                     tone = self.default_male_tone.clone() if gender == 'male' else self.default_female_tone.clone()
-                    tone.alias = speak_talk.speaker
+                    tone.alias = dialogue.speaker
                 else:
                     tone = self.voiceover_tone.clone()
                     tone.alias = 'VoiceOver'
-                self.speaker_tones[speak_talk.speaker] = tone
-            self.baidu_speech.append_speech(speak_talk.line, self.speaker_tones[speak_talk.speaker])
+                self.speaker_tones[dialogue.speaker] = tone
+            self.baidu_speech.append_speech(dialogue.line, self.speaker_tones[dialogue.speaker])
         self.baidu_speech.play()
+
+    def print_log(self):
+        last_row_num = -1
+        for dialogue in self.get_dialogues():
+            row_num = '' if last_row_num == dialogue.row_num else dialogue.row_num
+            last_row_num = dialogue.row_num
+            print(f"{'{0:<5}'.format(row_num)} [{'{0:{1}<3}'.format(dialogue.speaker, chr(12288))}] {dialogue.line}")
 
 
 if __name__ == '__main__':
@@ -287,7 +280,9 @@ if __name__ == '__main__':
     teller.set_default_female_tone(BaiduSpeech.Tone(per=0))
     # teller.set_tone('秦海', BaiduSpeech.Tone('秦海', per=1, pit=6))  # 普通男声，音调加高，声音更年轻
     # teller.set_tone('王晓晨', BaiduSpeech.Tone('王晓晨', per=0, pit=5))
-    teller.play(book)
+    teller.analyse(jamen_utils.load_text(book))
+    teller.print_log()
+    teller.play()
 
     time_end = time.perf_counter()
-    logging.info(f"time cost: {time_end - time_begin}")
+    logger.info(f"time cost: {time_end - time_begin}")
