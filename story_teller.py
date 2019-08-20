@@ -4,6 +4,8 @@ import re
 import sys
 import time
 
+import ngender
+
 import jamen_utils
 from baidu_speech import BaiduSpeech
 from double_linked_node import DoubleLinkedListNode
@@ -15,6 +17,7 @@ logging.basicConfig(
     format='%(asctime)s.%(msecs)03d %(filename)s: %(levelname)s %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
 )
+logging.getLogger("connectionpool").setLevel(logging.NOTSET)
 
 re_word_in_quote = re.compile("(“.*?”)")
 re_end_with_noword = re.compile(".*[^\u4E00-\u9FD5a-zA-Z0-9]$")
@@ -47,6 +50,16 @@ class SpeakerTalk(DoubleLinkedListNode):
         speaker = self.speaker if self.speaker else ''
         return f"[{'{0:>4}'.format(self.row_num)}][{'{0:{1}>3}'.format(speaker, chr(12288))}] {self.line}"
 
+    def find_prev_line(self):
+        """
+        查找上一句台词（非旁白）
+        :return:
+        """
+        prev = self.prev
+        while prev and not prev.is_in_quote:
+            prev = prev.prev
+        return prev
+
 
 class StoryTeller:
     MIN_HAN_WORD_LENGTH = 2
@@ -57,7 +70,9 @@ class StoryTeller:
 
     names = {}
     speaker_tones = {}
-    default_tone = BaiduSpeech.Tone()
+    default_male_tone = BaiduSpeech.Tone(pit=1)
+    default_female_tone = BaiduSpeech.Tone(pit=0)
+    voiceover_tone = BaiduSpeech.Tone(pit=3)
     speaker_talks = None
 
     def analyse(self, sentence):
@@ -79,6 +94,9 @@ class StoryTeller:
             speaker_count += int(bool(speak.speaker))
         logging.info(f"analyse done, line_count: {line_count}, speaker_count: {speaker_count}, rate = "
                      f"{speaker_count / line_count}")
+
+    def add_word(self, word, weight=1, prop='x'):
+        self.name_cutter.add_word(word, weight, prop)
 
     @staticmethod
     def split_to_double_linked(sentence):
@@ -117,31 +135,38 @@ class StoryTeller:
                 speaker = self._get_most_possible_speaker(n)
             else:
                 # 未被括号引用的内容，都是画外音
-                speaker = "旁白"
+                speaker = ""
 
             n.speaker = speaker
 
         return node
 
     def _get_most_possible_speaker(self, node):
+        # 查找同一行的后部分
         if node.next and node.next.row_num == node.row_num and not node.next.is_in_quote:
-            # 查找同一行的后部分
             speaker = self.__get_most_possible_speaker(node.next.line)
             if speaker:
                 return speaker
 
+        # 查找同一行的前部分
         if node.prev and node.prev.row_num == node.row_num and not node.prev.is_in_quote:
-            # 查找同一行的前部分
             speaker = self.__get_most_possible_speaker(node.prev.line)
             if speaker:
                 return speaker
 
+        # 查找上一行，看是否以冒号结尾
         prev = node.prev
         if prev and not prev.is_in_quote and prev.line[-1:] == '：':
-            # 查找上一行，看是否以冒号结尾
             speaker = self.__get_most_possible_speaker(prev.line)
             if speaker:
                 return speaker
+
+        # 查找上上句对话
+        prev = node.find_prev_line()
+        if prev:
+            prev = prev.find_prev_line()
+            if prev:
+                return prev.speaker
 
         next = node.next
         while next and next.is_in_quote:
@@ -202,37 +227,49 @@ class StoryTeller:
     def set_tone(self, speaker_name, tone):
         self.speaker_tones[speaker_name] = tone
 
-    def set_default_tone(self, tone):
-        self.default_tone = tone
+    def set_default_male_tone(self, tone):
+        self.default_male_tone = tone
+
+    def set_default_female_tone(self, tone):
+        self.default_female_tone = tone
+
+    def set_voiceover_tone(self, tone):
+        self.voiceover_tone = tone
 
     def play(self, book_path):
         content = jamen_utils.load_text(book_path)
         self.analyse(content)
 
         last_row_num = -1
-        for speak in self.speaker_talks.nodes():
-            row_num = '' if last_row_num == speak.row_num else speak.row_num; last_row_num = speak.row_num
+        for speak in self.get_speaker_talks():
+            row_num = '' if last_row_num == speak.row_num else speak.row_num
+            last_row_num = speak.row_num
 
             if speak.speaker:
-                # print(f"{'{0:<4}'.format(row_num)} [{'{0:{1}<3}'.format(speak.speaker, chr(12288))}] {speak.line}")
+                print(f"{'{0:<5}'.format(row_num)} [{'{0:{1}<3}'.format(speak.speaker, chr(12288))}] {speak.line}")
                 pass
             else:
-                print(f"{'{0:<4}'.format(row_num)} [{'{0:{1}<3}'.format('', chr(12288))}] {speak.line}")
+                print(f"{'{0:<5}'.format(row_num)} [{'{0:{1}<3}'.format('', chr(12288))}] {speak.line}")
 
-        # for speak_talk in teller.get_speaker_talks():
-        #     if speak_talk.speaker not in self.speaker_tones:
-        #         tone = self.default_tone.clone()
-        #         tone.alias = speak_talk.speaker
-        #         self.speaker_tones[speak_talk.speaker] = tone
-        #     self.baidu_speech.append_speech(speak_talk.line, self.speaker_tones[speak_talk.speaker])
-        # self.baidu_speech.play()
+        for speak_talk in self.get_speaker_talks():
+            if speak_talk.speaker not in self.speaker_tones:
+                if speak_talk.speaker:
+                    gender = ngender.guess(speak_talk.speaker)[0]
+                    tone = self.default_male_tone.clone() if gender == 'male' else self.default_female_tone.clone()
+                    tone.alias = speak_talk.speaker
+                else:
+                    tone = self.voiceover_tone.clone()
+                    tone.alias = 'VoiceOver'
+                self.speaker_tones[speak_talk.speaker] = tone
+            self.baidu_speech.append_speech(speak_talk.line, self.speaker_tones[speak_talk.speaker])
+        self.baidu_speech.play()
 
 
 if __name__ == '__main__':
     time_begin = time.perf_counter()
-    # book = 'res/材料帝国1.txt'
-    # book = 'res/test_book.txt'
-    book = 'res/材料帝国.txt'
+
+    book = 'res/材料帝国1.txt'
+    # book = 'res/材料帝国.txt'
     # book = 'D:\\OneDrive\\Books\\临高启明.txt'
     # book = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
@@ -244,27 +281,13 @@ if __name__ == '__main__':
     # book = 'E:\\BaiduCloud\\Books\\活色生香.txt'
     # book = 'E:\\BaiduCloud\\Books\\弹痕.txt'
     teller = StoryTeller()
-
-    # 默认旁白
-    voice_over_tone = BaiduSpeech.Tone('旁白')
-    voice_over_tone.per = 3
-    teller.set_tone('旁白', voice_over_tone)
-
-    qinhai_tone = BaiduSpeech.Tone('秦海')
-    qinhai_tone.per = 1  # 普通男生
-    qinhai_tone.pit = 6  # 音调加高，声音更年轻
-    teller.set_tone('秦海', qinhai_tone)
-
-    qinhai_tone = BaiduSpeech.Tone('王晓晨')
-    qinhai_tone.per = 0  # 普通女性
-    qinhai_tone.pit = 5
-    teller.set_tone('王晓晨', qinhai_tone)
-
-    # 默认声
-    default_tone = BaiduSpeech.Tone()
-    default_tone.per = 1
-    teller.set_default_tone(default_tone)
-
+    teller.add_word('日本人', 1000, 'nr')
+    teller.set_voiceover_tone(BaiduSpeech.Tone('旁白', per=3))  # 情感合成-度逍
+    teller.set_default_male_tone(BaiduSpeech.Tone(per=1))
+    teller.set_default_female_tone(BaiduSpeech.Tone(per=0))
+    # teller.set_tone('秦海', BaiduSpeech.Tone('秦海', per=1, pit=6))  # 普通男声，音调加高，声音更年轻
+    # teller.set_tone('王晓晨', BaiduSpeech.Tone('王晓晨', per=0, pit=5))
     teller.play(book)
+
     time_end = time.perf_counter()
     logging.info(f"time cost: {time_end - time_begin}")

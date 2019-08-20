@@ -27,7 +27,7 @@ class JamenCutter:
     MAX_NAME_LENGTH = 6
 
     _chinese_words = {}  # 完整字典
-    __chinese_words_total_weight = 0
+    _chinese_words_total_weight = 0
     _chinese_family_names = {}
     _chinese_given_names = {}
     _chinese_name_prefixes = {}
@@ -49,7 +49,7 @@ class JamenCutter:
         ], self._chinese_words)
 
         for v in self._chinese_words.values():
-            self.__chinese_words_total_weight += v[0]
+            self._chinese_words_total_weight += v[0]
         logging.info(f"dict words count: {len(self._chinese_words)}")
 
         self._load_dicts_with_cache(['dict/japanese_names.dict'], self._japanese_names)
@@ -103,14 +103,8 @@ class JamenCutter:
 
                 word, weight, prop = (line + ' 1 x').split(' ')[:3]
                 weight = int(float(weight))
-                if word not in dict:
-                    dict[word] = weight, prop
+                self._add_word(dict, word, weight, prop)
 
-                # 构建前缀词典
-                for i in range(1, len(line)):
-                    frag = word[:i]
-                    if frag not in dict:
-                        dict[frag] = 0, ''  # 前缀词权重为0
         logging.debug(f"load dict['{dict_path}'] done, size: {len(dict)} ")
 
     def __load_not_included_regex(self, dict_path):
@@ -127,6 +121,22 @@ class JamenCutter:
                 reg_str += exp
         self._not_included_regex = re.compile(f"({reg_str})", re.U)
         # self.__stop_regex = re.compile(f"{reg_str}", re.U)
+
+    def add_word(self, word, weight=1, prop='x'):
+        pre_weight = self._chinese_words.get(word, (0, 'x'))[0]
+        self._add_word(self._chinese_words, word, weight, prop)
+        self._chinese_words_total_weight += (weight - pre_weight)
+
+    @staticmethod
+    def _add_word(dict, word, weight, prop):
+        if word not in dict:
+            dict[word] = weight, prop
+
+            # 构建前缀词典
+            for i in range(1, len(word)):
+                frag = word[:i]
+                if frag not in dict:
+                    dict[frag] = 0, ''  # 前缀词权重为0
 
     def cut(self, sentence):
         for word, prop in self.cut_with_prop(sentence):
@@ -225,7 +235,7 @@ class JamenCutter:
     def _calc_route(self, clip, dag):
         route = {}
         n = len(dag)
-        total_log_weight = log(self.__chinese_words_total_weight)
+        total_log_weight = log(self._chinese_words_total_weight)
         route[n] = (0, 0, '', 0, '')  # 方便计算时不溢出
         route_debug = {}
         for i in range(n - 1, -1, -1):
@@ -325,12 +335,8 @@ class JamenCutter:
         :return:
         """
         names = {}
-        for tag, prop in self.cut_with_prop(sentence):
-            if prop == 'nr':
-                names[tag] = names.get(tag, 0) + 1
-                pass
-            # elif prop == 'x' and len(tag) >= 2:
-            #     names[tag] = names.get(tag, 0) + 1
+        for tag, prop in [(tag, prop) for tag, prop in self.cut_with_prop(sentence) if prop == 'nr']:
+            names[tag] = names.get(tag, 0) + 1
 
         # 剔除一些跟高频名字粘结的低频名字，比如“秦海”与“秦海道”
         for name, count in sorted(names.items(), key=lambda x: len(x[0]), reverse=True):
@@ -368,6 +374,8 @@ if __name__ == '__main__':
     # book_path = 'res/test_book.txt'
     # book_path = 'res/材料帝国1.txt'
     book_path = 'res/材料帝国1.txt'
+    cutter.add_word('日本人', 500, 'nr')
+
     # book_path = 'D:/OneDrive/Books/临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\侯卫东官场笔记.txt'
@@ -400,10 +408,11 @@ if __name__ == '__main__':
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop('老刘，你们就照小秦和冷科长的安排去做')]))
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop('苗磊急于向父亲和项纪勇推荐秦海')]))
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop('韦宝林和宁中英又扯了几句闲话')]))
+    print("/".join([k + v for (k, v) in cutter.cut_with_prop('	“不好意思，请问刚才是您给我打电话吗？”日本人用生硬的汉语问道。')]))
 
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop(jamen_utils.load_text(book_path))]))
-    for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
-        print((name, count))
+    # for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
+    #     print((name, count))
 
     # cutter.pre_extract_names(jamen_utils.load_text(book_path))
 

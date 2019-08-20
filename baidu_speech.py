@@ -1,5 +1,4 @@
 import logging
-import os
 import re
 import sys
 import threading
@@ -8,6 +7,8 @@ from urllib.parse import quote
 
 import playsound
 import requests
+
+import jamen_utils
 
 logging.basicConfig(
     stream=sys.stderr,
@@ -50,8 +51,12 @@ class BaiduSpeech:
         spd = 5
         """语速，取值0-15，默认为5中语速"""
 
-        def __init__(self, alias="Unknown"):
+        def __init__(self, alias="Unknown", per=0, vol=5, pit=5, spd=5):
             self.alias = alias
+            self.per = per
+            self.vol = vol
+            self.pit = pit
+            self.spd = spd
 
         def clone(self):
             ret = BaiduSpeech.Tone(self.alias)
@@ -65,6 +70,7 @@ class BaiduSpeech:
         self.__app_id = app_id
         self.__api_key = api_key
         self.secret_key = secret_key
+        jamen_utils.makesure_dir('mp3')
 
     def append_speech(self, text, tone=Tone()):
         self.__request_list.append((text, tone))
