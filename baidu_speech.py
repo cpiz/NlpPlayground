@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import sys
 import threading
@@ -18,13 +19,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-APP_ID = 16634868
+APP_ID = 16998627
 
 # 填写网页上申请的appkey 如 API_KEY="g8eBUMSokVB1BHGmgxxxxxx"
-API_KEY = 'OTTnHiPsNxpQ9Id68qfhhVwO'
+API_KEY = 'B7QU44R0Gvlrsz35ZTPCNU2T'
 
 # 填写网页上申请的APP SECRET 如 SECRET_KEY="94dc99566550d87f8fa8ece112xxxxx"
-SECRET_KEY = '94Y6bfKczlU00ZyNkE3ESdkzkD1rxtPV'
+SECRET_KEY = 'SSRLND8cZwG2CAKAeCEvVgxpjj2WwDAY'
 
 re_end_with_exclamation = re.compile('“.*[！!]”')
 re_word_in_quote = re.compile("(“.*?”)")
@@ -40,11 +41,13 @@ class BaiduSpeech:
     __request_list = []
     __play_list = []
 
+    __export_only = False
+
     class Tone:
         alias = None
         """发音人别名"""
         per = 0
-        """发音人选择, 0为普通女声，1为普通男生，3为情感合成-度逍遥，4为情感合成-度丫丫，默认为普通女声"""
+        """发音人选择, 度小宇=1，度小美=0，度逍遥=3，度丫丫=4，度博文=106，度小童=110，度小萌=111，度米朵=103，度小娇=5"""
         vol = 5
         """音量，取值0-15，默认为5中音量"""
         pit = 5
@@ -76,7 +79,9 @@ class BaiduSpeech:
     def append_speech(self, text, tone=Tone()):
         self.__request_list.append((text, tone))
 
-    def play(self):
+    def play(self, export_only=False):
+        self.__export_only = export_only
+
         t1 = threading.Thread(target=self.__run_text2audio)
         t1.setDaemon(True)
         t1.start()
@@ -84,7 +89,6 @@ class BaiduSpeech:
         t2 = threading.Thread(target=self.__run_playsound)
         t2.setDaemon(True)
         t2.start()
-
         t2.join()
 
     def __get_http_session(self):
@@ -175,28 +179,29 @@ class BaiduSpeech:
     def __current_milli_time():
         return int(round(time() * 1000))
 
-    def __run_playsound(self):
+    def __run_text2audio(self):
         while True:
             idle = True
-            if self.__play_list:
-                text, tone, audio = self.__play_list.pop(0)
-                logger.debug(f"play {audio}[{tone.alias}]{text}")
-                self.__play_audio(audio)
-                # if os.path.exists(audio):
-                #     os.remove(audio)
+            while len(self.__play_list) <= 2 and self.__request_list:
+                text, tone = self.__request_list.pop(0)
+                audio = self.__request_speech(text, tone)
+                if audio:
+                    self.__play_list.append((text, tone, audio))
                 idle = False
 
             if idle:
                 sleep(0.020)
 
-    def __run_text2audio(self):
+    def __run_playsound(self):
         while True:
             idle = True
-            while len(self.__play_list) < 3 and self.__request_list:
-                text, tone = self.__request_list.pop(0)
-                audio = self.__request_speech(text, tone)
-                if audio:
-                    self.__play_list.append((text, tone, audio))
+            if self.__play_list:
+                text, tone, audio_file_path = self.__play_list.pop(0)
+                if os.path.exists(audio_file_path):
+                    logger.debug(f"play {audio_file_path}[{tone.alias}]{text}")
+                    if not self.__export_only:
+                        self.__play_audio(audio_file_path)  # 播放声音
+                        os.remove(audio_file_path)
                 idle = False
 
             if idle:

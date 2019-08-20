@@ -17,7 +17,8 @@ logging.basicConfig(
     format='%(asctime)s.%(msecs)03d %(filename)s: %(levelname)s %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logging.getLogger("urllib3.connectionpool").setLevel(logging.INFO)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("pydub").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 re_word_in_quote = re.compile("(“.*?”)")
@@ -248,7 +249,7 @@ class StoryTeller:
                     tone.alias = 'VoiceOver'
                 self.speaker_tones[dialogue.speaker] = tone
             self.baidu_speech.append_speech(dialogue.line, self.speaker_tones[dialogue.speaker])
-        self.baidu_speech.play()
+        self.baidu_speech.play(export_only=True)
 
     def print_log(self):
         last_row_num = -1
@@ -274,12 +275,12 @@ if __name__ == '__main__':
     # book = 'E:\\BaiduCloud\\Books\\活色生香.txt'
     # book = 'E:\\BaiduCloud\\Books\\弹痕.txt'
     teller = StoryTeller()
-    teller.add_word('日本人', 1000, 'nr')
+    teller.add_word('日本人', 500, 'nr')
+    teller.add_word('文化人', 500, 'nr')
     teller.set_voiceover_tone(BaiduSpeech.Tone('旁白', per=3))  # 情感合成-度逍
     teller.set_default_male_tone(BaiduSpeech.Tone(per=1))
     teller.set_default_female_tone(BaiduSpeech.Tone(per=0))
-    # teller.set_tone('秦海', BaiduSpeech.Tone('秦海', per=1, pit=6))  # 普通男声，音调加高，声音更年轻
-    # teller.set_tone('王晓晨', BaiduSpeech.Tone('王晓晨', per=0, pit=5))
+    teller.set_tone('秦海', BaiduSpeech.Tone('秦海', per=106, pit=6))  # 普通男声，音调加高，声音更年轻
     teller.analyse(jamen_utils.load_text(book))
     teller.print_log()
     teller.play()

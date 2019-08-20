@@ -130,7 +130,8 @@ class JamenCutter:
 
     @staticmethod
     def _add_word(dict, word, weight, prop):
-        if word not in dict:
+        old_weight, old_prop = dict.get(word, (0, ''))
+        if weight > old_weight:
             dict[word] = weight, prop
 
             # 构建前缀词典
@@ -376,6 +377,7 @@ if __name__ == '__main__':
     # book_path = 'res/材料帝国1.txt'
     book_path = 'res/材料帝国1.txt'
     cutter.add_word('日本人', 500, 'nr')
+    cutter.add_word('文化人', 500, 'nr')
 
     # book_path = 'D:/OneDrive/Books/临高启明.txt'
     # book_path = 'E:\\BaiduCloud\\Books\\庆余年.txt'
@@ -410,6 +412,8 @@ if __name__ == '__main__':
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop('苗磊急于向父亲和项纪勇推荐秦海')]))
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop('韦宝林和宁中英又扯了几句闲话')]))
     print("/".join([k + v for (k, v) in cutter.cut_with_prop('	“不好意思，请问刚才是您给我打电话吗？”日本人用生硬的汉语问道。')]))
+    print("/".join([k + v for (k, v) in cutter.cut_with_prop(
+        '文化人跑到秦海面前，呼哧呼哧喘了几口粗气，这才说道：“小伙子，我刚才不小心说错了，你过了县中以后，要走900米才是农药厂，如果只走了800米就左拐，你就会掉到鱼塘里去了。”')]))
 
     # print("/".join([k + v for (k, v) in cutter.cut_with_prop(jamen_utils.load_text(book_path))]))
     # for name, count in cutter.extract_names(jamen_utils.load_text(book_path)):
