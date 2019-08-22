@@ -145,13 +145,13 @@ class StoryTeller:
     def _get_most_possible_speaker(self, node):
         # 查找同一行的后部分
         if node.next and node.next.row_num == node.row_num and not node.next.is_in_quote:
-            speaker = self.__get_most_possible_speaker(node.next.line)
+            speaker = self.__get_most_possible_speaker(self.__first_sentence(node.next.line))
             if speaker:
                 return speaker
 
         # 查找同一行的前部分
         if node.prev and node.prev.row_num == node.row_num and not node.prev.is_in_quote:
-            speaker = self.__get_most_possible_speaker(node.prev.line)
+            speaker = self.__get_most_possible_speaker(self.__last_sentence(node.prev.line))
             if speaker:
                 return speaker
 
@@ -178,6 +178,16 @@ class StoryTeller:
 
         return None
 
+    def __first_sentence(self, paragraph):
+        _re_sentence_punctuation = re.compile("[！？。]", re.U)
+        sentences = _re_sentence_punctuation.split(paragraph)
+        return sentences[0]
+
+    def __last_sentence(self, paragraph):
+        _re_sentence_punctuation = re.compile("[！？。]", re.U)
+        sentences = _re_sentence_punctuation.split(paragraph)
+        return paragraph
+
     def __get_most_possible_speaker(self, sentence):
         tmp_speakers = []
         for frag in self.list_sub_words(sentence):
@@ -196,7 +206,7 @@ class StoryTeller:
                 speakers.append(tmp_speakers[i])
 
         if speakers:
-            return speakers[0][0]
+            return speakers[0][0] + str(speakers[0][1])
 
         # if speakers:
         #     return "".join([a + str(b) for a, b in speakers])
