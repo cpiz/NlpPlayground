@@ -179,12 +179,29 @@ class StoryTeller:
         return None
 
     def __get_most_possible_speaker(self, sentence):
-        # 先尝试找高频文字
+        tmp_speakers = []
         for frag in self.list_sub_words(sentence):
+            # 找出句子中所有人名
             name_count = self.names.get(frag, 0)
             if name_count > 0:
-                return frag  # 返回第一个名字
+                tmp_speakers.append((frag, name_count))
 
+        speakers = []
+        n = len(tmp_speakers)
+        for i in range(n):
+            if (i < n - 1 and len(tmp_speakers[i + 1][0]) > len(tmp_speakers[i][0])
+                    and tmp_speakers[i + 1][0][:len(tmp_speakers[i][0])] == tmp_speakers[i][0]):
+                continue
+            else:
+                speakers.append(tmp_speakers[i])
+
+        if speakers:
+            return speakers[0][0]
+
+        # if speakers:
+        #     return "".join([a + str(b) for a, b in speakers])
+
+        # 未查找到已有姓名的情况，返回第一个模式匹配到的姓名
         for frag in self.list_sub_words(sentence):
             if self.name_cutter.match_chinese_name(frag) > 0:
                 return frag
@@ -251,7 +268,7 @@ class StoryTeller:
             self.baidu_speech.append_speech(dialogue.line, self.speaker_tones[dialogue.speaker])
         self.baidu_speech.play(export_only=True)
 
-    def print_log(self):
+    def print_dialogues(self):
         last_row_num = -1
         for dialogue in self.get_dialogues():
             row_num = '' if last_row_num == dialogue.row_num else dialogue.row_num
@@ -282,8 +299,8 @@ if __name__ == '__main__':
     teller.set_default_female_tone(BaiduSpeech.Tone(per=0))
     teller.set_tone('秦海', BaiduSpeech.Tone('秦海', per=106, pit=6))  # 普通男声，音调加高，声音更年轻
     teller.analyse(jamen_utils.load_text(book))
-    teller.print_log()
-    teller.play()
+    teller.print_dialogues()
+    # teller.play()
 
     time_end = time.perf_counter()
     logger.info(f"time cost: {time_end - time_begin}")
