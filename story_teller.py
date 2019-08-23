@@ -22,7 +22,9 @@ logging.getLogger("pydub").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 re_word_in_quote = re.compile("(“.*?”)")
-re_end_with_noword = re.compile(".*[^\u4E00-\u9FD5a-zA-Z0-9]$")
+re_word_in_quote_no_punctuation = re.compile("(“[\u4E00-\u9FD5a-zA-Z0-9]+”)")
+re_end_with_punctuation = re.compile(".*[^\u4E00-\u9FD5a-zA-Z0-9]$")
+re_begin_with_punctuation = re.compile("[^\u4E00-\u9FD5a-zA-Z0-9].*$")
 
 
 # re_quote = re.compile("[“”]")
@@ -239,10 +241,14 @@ class StoryTeller:
         """
         for n in node.nodes():
             if n.is_in_quote:
-                if n.prev and n.prev.row_num == n.row_num \
-                        and not re_end_with_noword.match(n.prev.line):
-                    # 排除简单引用的情况，如：在整个科学院系统都素有“鬼才”之称，“鬼才”就不是对话内容
-                    # 规则是与前文直接连续，无换行符或标点间隔
+                if (n.prev and n.prev.row_num == n.row_num and not re_end_with_punctuation.match(n.prev.line)) \
+                        or (n.prev and n.prev.row_num != n.row_num
+                            and n.next and n.next.row_num == n.row_num
+                            and not re_begin_with_punctuation.match(n.next.line)
+                            and re_word_in_quote_no_punctuation.match(n.line)):
+                    # 排除简单引用的情况，
+                    # 如：在整个科学院系统都素有“鬼才”之称。“鬼才”就不是对话内容。规则是与前文直接连续，无换行符或标点间隔
+                    # 如：“明白人”当家。“明白人”就不是对话内容，规则是与后文直接连续，但引号内无标点
                     n.prev.line += n.line  # 合并内容
                     n.delete()
 
